@@ -505,10 +505,205 @@ setInterval(fetchData, 30000);
 </html>'''
 
 
+CONFIG_HTML = r'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Model Config — AI Dev Team</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --border: #30363d;
+  --text: #c9d1d9; --text-muted: #8b949e; --accent: #58a6ff;
+  --green: #3fb950; --yellow: #d2991d; --red: #f85149;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.5; }
+header { background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+header h1 { font-size: 17px; } header h1 span { color: var(--accent); }
+header nav a { color: var(--text-muted); text-decoration: none; font-size: 13px;
+  padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px; }
+header nav a:hover { color: var(--accent); }
+main { max-width: 800px; margin: 0 auto; padding: 24px; }
+.section-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; color: var(--accent); }
+.alert { padding: 10px 16px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; display: none; }
+.alert.success { display: block; background: #1a3a2a; color: var(--green); }
+.alert.error { display: block; background: #3a1a1a; color: var(--red); }
+.config-form { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.config-row { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.config-row:last-child { border-bottom: none; }
+.config-row .role-info { width: 200px; }
+.config-row .role-name { font-weight: 600; font-size: 14px; }
+.config-row .role-desc { font-size: 11px; color: var(--text-muted); }
+.config-row .model-input { flex: 1; display: flex; gap: 8px; align-items: center; }
+.config-row input {
+  flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  padding: 6px 12px; border-radius: 6px; font-size: 13px; font-family: monospace;
+}
+.config-row input:focus { outline: none; border-color: var(--accent); }
+.config-row .current-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px;
+  background: #1c2838; color: var(--accent); white-space: nowrap; }
+.actions { display: flex; gap: 10px; margin-top: 16px; }
+button {
+  background: var(--accent); color: #fff; border: none;
+  padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+}
+button:hover { opacity: 0.9; }
+button.secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+button.danger { background: var(--red); }
+.gateway-info { margin-top: 24px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px; font-size: 13px; }
+.gateway-info h4 { margin-bottom: 8px; color: var(--text-muted); }
+.gateway-info code { background: var(--bg); padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+.gateway-info .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.gateway-info .status.on { background: var(--green); }
+.gateway-info .status.off { background: var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Model <span>Config</span></h1>
+  <nav>
+    <a href="/">← Dashboard</a>
+  </nav>
+</header>
+<main>
+<div id="alert" class="alert"></div>
+
+<div class="section-title">Role Model Assignments</div>
+<div class="config-form" id="config-form"></div>
+
+<div class="actions">
+  <button onclick="saveConfig()">Save Config</button>
+  <button class="secondary" onclick="syncModels()">Sync to Agents</button>
+</div>
+
+<div class="gateway-info">
+  <h4>Gateway Status</h4>
+  <p><span class="status off" id="gw-status"></span> <span id="gw-text">LiteLLM Gateway: checking...</span></p>
+  <p style="margin-top:8px;color:var(--text-muted)">
+    Start gateway: <code>bash scripts/start-gateway.sh</code><br>
+    Claude Code env: <code>ANTHROPIC_BASE_URL=http://localhost:4000</code><br>
+    API keys: edit <code>config/.env</code> (copy from <code>config/.env.example</code>)
+  </p>
+</div>
+</main>
+
+<script>
+const ROLE_DESCRIPTIONS = {
+  'cto': 'CTO — 技术战略',
+  'architect': 'Architect — 架构治理',
+  'pm': 'PM — 产品需求',
+  'tech-lead': 'Tech Lead — 技术方案',
+  'designer': 'Designer — UI/UX',
+  'reviewer-r1': 'R1 评审员 — 架构',
+  'reviewer-r2': 'R2 评审员 — 产品',
+  'reviewer-r3': 'R3 评审员 — 工程',
+  'senior-engineer': 'Senior Engineer — 开发',
+  'devops': 'DevOps — CI/CD',
+  'market-manager': 'Market — 市场调研',
+};
+
+async function loadConfig() {
+  const resp = await fetch('/api/models');
+  const data = await resp.json();
+  const models = data.models || {};
+  const available = data.available || [];
+  const form = document.getElementById('config-form');
+
+  let html = '';
+  for (const [role, desc] of Object.entries(ROLE_DESCRIPTIONS)) {
+    const model = models[role] || 'inherit';
+    const datalistId = 'dl-' + role;
+    html += '<div class="config-row">' +
+      '<div class="role-info"><div class="role-name">' + role + '</div><div class="role-desc">' + desc + '</div></div>' +
+      '<div class="model-input">' +
+      '<input list="' + datalistId + '" id="role-' + role + '" value="' + model + '" onchange="markChanged(\'' + role + '\')">' +
+      '<datalist id="' + datalistId + '">' + available.map(m => '<option value="' + m + '">').join('') + '</datalist>' +
+      '<span class="current-badge">' + model + '</span>' +
+      '</div></div>';
+  }
+  form.innerHTML = html;
+}
+
+function markChanged(role) {
+  const input = document.getElementById('role-' + role);
+  const badge = input.nextElementSibling.nextElementSibling;
+  badge.textContent = input.value;
+  badge.style.background = '#3a2a1a';
+  badge.style.color = 'var(--yellow)';
+}
+
+function showAlert(msg, type) {
+  const el = document.getElementById('alert');
+  el.textContent = msg; el.className = 'alert ' + type;
+  setTimeout(() => { el.className = 'alert'; }, 4000);
+}
+
+async function saveConfig() {
+  const roles = {};
+  for (const role of Object.keys(ROLE_DESCRIPTIONS)) {
+    const input = document.getElementById('role-' + role);
+    if (input) roles[role] = input.value.trim();
+  }
+  const resp = await fetch('/api/models', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({roles})
+  });
+  const data = await resp.json();
+  if (data.ok) {
+    showAlert('Config saved. Run "Sync to Agents" to apply.', 'success');
+    // restore badges
+    document.querySelectorAll('.current-badge').forEach(b => {
+      b.style.background = '#1c2838'; b.style.color = 'var(--accent)';
+    });
+  } else {
+    showAlert('Error: ' + (data.error || 'unknown'), 'error');
+  }
+}
+
+async function syncModels() {
+  const resp = await fetch('/api/models/sync', {method: 'POST'});
+  const data = await resp.json();
+  if (data.ok) {
+    showAlert('Synced! ' + (data.output || ''), 'success');
+  } else {
+    showAlert('Sync failed: ' + (data.error || 'unknown'), 'error');
+  }
+}
+
+// Check gateway health
+async function checkGateway() {
+  try {
+    const resp = await fetch('http://localhost:4000/health', {signal: AbortSignal.timeout(3000)});
+    if (resp.ok) {
+      document.getElementById('gw-status').className = 'status on';
+      document.getElementById('gw-text').textContent = 'LiteLLM Gateway: running';
+      return;
+    }
+  } catch(e) {}
+  document.getElementById('gw-status').className = 'status off';
+  document.getElementById('gw-text').textContent = 'LiteLLM Gateway: not running';
+}
+
+loadConfig();
+checkGateway();
+</script>
+</body>
+</html>'''
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the dashboard server."""
 
     projects_dir = Path.cwd() / 'projects'
+
+    @property
+    def project_root(self):
+        return self.projects_dir.parent
 
     def log_message(self, format, *args):
         """Suppress default logging or keep it minimal."""
@@ -596,7 +791,99 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send_json({'error': 'No pipeline found for ' + project}, 404)
             return
 
+        if path == '/api/models':
+            config_file = Path(self.project_root) / 'config' / 'models.json'
+            if config_file.exists():
+                config = json.loads(config_file.read_text())
+                # Also load available models from litellm.yaml
+                available = self._load_available_models()
+                self._send_json({'models': config.get('roles', {}), 'available': available})
+            else:
+                self._send_json({'error': 'models.json not found'}, 404)
+            return
+
+        if path == '/config':
+            self._send_html(self._config_page())
+            return
+
         self._send_json({'error': 'Not found'}, 404)
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip('/') or '/'
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length) if content_length > 0 else b'{}'
+
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            self._send_json({'error': 'Invalid JSON'}, 400)
+            return
+
+        if path == '/api/models':
+            self._handle_save_models(data)
+            return
+
+        if path == '/api/models/sync':
+            self._handle_sync_models()
+            return
+
+        self._send_json({'error': 'Not found'}, 404)
+
+    def _load_available_models(self):
+        """Parse litellm.yaml for available model names."""
+        litellm_config = Path(self.project_root) / 'config' / 'litellm.yaml'
+        if not litellm_config.exists():
+            return ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5',
+                    'deepseek-chat', 'deepseek-reasoner', 'gpt-4o', 'gpt-5-mini',
+                    'qwen3-coder', 'opus', 'sonnet', 'haiku', 'inherit']
+        try:
+            import yaml
+            config = yaml.safe_load(litellm_config.read_text())
+            return [m['model_name'] for m in config.get('model_list', [])]
+        except Exception:
+            return [m['model_name'] for m in self._parse_yaml_models(litellm_config)]
+
+    def _parse_yaml_models(self, path):
+        """Fallback: simple YAML model name parser without pyyaml."""
+        models = []
+        with open(path) as f:
+            content = f.read()
+        import re
+        for m in re.finditer(r'model_name:\s*(\S+)', content):
+            models.append(m.group(1))
+        return [{'model_name': n} for n in models]
+
+    def _handle_save_models(self, data):
+        """Save model assignments to models.json."""
+        config_file = Path(self.project_root) / 'config' / 'models.json'
+        roles = data.get('roles', {})
+        if not roles:
+            self._send_json({'error': 'Missing roles data'}, 400)
+            return
+        try:
+            config = json.loads(config_file.read_text())
+            config['roles'].update(roles)
+            config_file.write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n')
+            self._send_json({'ok': True, 'message': f'Saved {len(roles)} role(s)'})
+        except Exception as e:
+            self._send_json({'error': str(e)}, 500)
+
+    def _handle_sync_models(self):
+        """Run sync-models.py to apply model changes to agents."""
+        import subprocess
+        sync_script = Path(self.project_root) / 'scripts' / 'sync-models.py'
+        try:
+            result = subprocess.run(
+                ['python3.14', str(sync_script)],
+                capture_output=True, text=True, timeout=15
+            )
+            self._send_json({'ok': True, 'output': result.stdout.strip()})
+        except Exception as e:
+            self._send_json({'error': str(e)}, 500)
+
+    def _config_page(self):
+        return CONFIG_HTML
 
 
 def main():

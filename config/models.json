@@ -1,19 +1,17 @@
 {
   "_description": "每角色的模型配置。编辑后运行 python3 scripts/sync-models.py 同步。支持任意模型ID。",
   "_third_party_note": "使用 DeepSeek/OpenAI 等第三方模型需要在 Claude Code 环境变量中配置 provider，详见 README 的「第三方模型配置」章节。评审员使用不同模型确保多角度独立判断。",
-
   "roles": {
-    "architect":      "opus",
-    "cto":            "opus",
-    "pm":             "opus",
-    "tech-lead":      "opus",
-    "designer":       "opus",
-    "reviewer-r1":    "opus",
-    "reviewer-r2":    "sonnet",
-    "reviewer-r3":    "haiku",
-
+    "architect": "opus",
+    "cto": "opus",
+    "pm": "opus",
+    "tech-lead": "opus",
+    "designer": "opus",
+    "reviewer-r1": "opus",
+    "reviewer-r2": "sonnet",
+    "reviewer-r3": "haiku",
     "senior-engineer": "inherit",
-    "devops":          "inherit",
-    "market-manager":  "inherit"
+    "devops": "inherit",
+    "market-manager": "inherit"
   }
 }
