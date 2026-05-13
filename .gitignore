@@ -26,3 +26,6 @@ dashboards/
 .claude/settings.local.json
 .env
 .env.*
+
+# Claude Code runtime
+.remember/
