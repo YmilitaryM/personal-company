@@ -130,6 +130,76 @@ python3.14 scripts/sync-models.py            # 应用
 python3.14 scripts/sync-models.py --dry-run  # 预览
 ```
 
+### 第三方模型配置（DeepSeek / OpenAI 等）
+
+`models.json` 只定义模型 ID，真正使用第三方模型需要在启动 Claude Code 前配置环境变量。
+
+**方式一：Anthropic 兼容网关（推荐，MCP 工具可用）**
+
+Claude Code 支持通过 `ANTHROPIC_BASE_URL` 路由到任何 Anthropic 兼容的后端：
+
+```bash
+# DeepSeek（原生支持 Anthropic 格式）
+export ANTHROPIC_BASE_URL="https://api.deepseek.com/anthropic"
+export ANTHROPIC_API_KEY="sk-your-deepseek-key"
+claude --plugin-dir ~/ai-dev-team
+```
+
+```bash
+# OpenRouter（290+ 模型，Bearer token 认证）
+export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+export ANTHROPIC_AUTH_TOKEN="sk-or-your-key"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="anthropic/claude-opus-4-7"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="deepseek/deepseek-v4-pro"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="qwen/qwen3-coder"
+claude --plugin-dir ~/ai-dev-team
+```
+
+```bash
+# LiteLLM 本地网关（兼容性最好，推荐生产使用）
+export ANTHROPIC_BASE_URL="http://localhost:4000"
+export ANTHROPIC_AUTH_TOKEN="sk-litellm-key"
+claude --plugin-dir ~/ai-dev-team
+```
+
+**方式二：OpenAI 兼容模式**
+
+```bash
+# OpenAI
+export CLAUDE_CODE_USE_OPENAI=1
+export OPENAI_API_KEY="sk-your-openai-key"
+export OPENAI_MODEL="gpt-4o"
+claude --plugin-dir ~/ai-dev-team
+
+# DeepSeek（OpenAI 格式）
+export CLAUDE_CODE_USE_OPENAI=1
+export OPENAI_API_KEY="sk-your-deepseek-key"
+export OPENAI_BASE_URL="https://api.deepseek.com/v1"
+export OPENAI_MODEL="deepseek-chat"
+claude --plugin-dir ~/ai-dev-team
+```
+
+**在 `models.json` 中对应使用**：
+
+```json
+{
+  "roles": {
+    "cto":            "claude-opus-4-7",
+    "reviewer-r1":    "claude-opus-4-7",
+    "reviewer-r2":    "deepseek-chat",
+    "reviewer-r3":    "qwen3-coder",
+    "senior-engineer": "inherit"
+  }
+}
+```
+
+> **重要提示**：
+> - **MCP 工具**和视觉/图片输入依赖 Anthropic 原生 streaming tool-call 协议，第三方后端可能不完全支持。LiteLLM 是目前兼容性最好的网关方案
+> - `ANTHROPIC_API_KEY` 发 `x-api-key` header，`ANTHROPIC_AUTH_TOKEN` 发 `Authorization: Bearer` header，用错会导致认证失败
+> - DeepSeek 成本约为 Anthropic 的 1/17（$0.44 vs $3/M input tokens）
+python3.14 scripts/sync-models.py --dry-run  # 预览
+```
+
 ### 一键自动化流水线
 
 `/pipeline start <project>` 运行完整 7 阶段流程，无需人工介入：

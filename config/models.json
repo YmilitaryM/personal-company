@@ -1,7 +1,6 @@
 {
-  "_description": "每角色的模型配置。编辑此文件后运行 python3 scripts/sync-models.py 同步到 agents/",
-  "_models_available": ["内置: opus, sonnet, haiku, inherit。也支持任意自定义模型ID，例如 claude-opus-4-7、deepseek-v4-pro、gpt-5 等。"],
-  "_note": "自定义模型直接填写模型 ID 即可，sync-models.py 会原样写入 agent 定义。评审员使用不同模型确保多角度独立判断。",
+  "_description": "每角色的模型配置。编辑后运行 python3 scripts/sync-models.py 同步。支持任意模型ID。",
+  "_third_party_note": "使用 DeepSeek/OpenAI 等第三方模型需要在 Claude Code 环境变量中配置 provider，详见 README 的「第三方模型配置」章节。评审员使用不同模型确保多角度独立判断。",
 
   "roles": {
     "architect":      "opus",
