@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
+import socketserver
+socketserver.TCPServer.allow_reuse_address = True
 
 
 def load_dashboard_data(projects_dir: Path) -> dict:

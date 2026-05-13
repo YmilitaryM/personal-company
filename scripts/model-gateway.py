@@ -23,6 +23,8 @@ from pathlib import Path
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
+import socketserver
+socketserver.TCPServer.allow_reuse_address = True
 
 # Load .env before litellm import so it picks up API keys
 PROJECT_DIR = Path(os.environ.get('CLAUDE_PROJECT_DIR', Path.cwd()))

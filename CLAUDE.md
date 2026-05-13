@@ -79,11 +79,13 @@ claude plugin install --scope user .
 
 Pipeline state is saved to `projects/<name>/.pipeline-state.json` — resume with `/pipeline resume <name>`.
 
-### Web Dashboard
+### Web Dashboard + Model Gateway
 
 ```bash
-python3 scripts/web_dashboard.py --port 8080
-# Open http://localhost:8080 — real-time project monitoring, auto-refresh 30s
+bash scripts/start.sh
+# Opens http://localhost:8080 (dashboard) + http://localhost:4000 (model gateway)
+# Model config UI: http://localhost:8080/config
+# Start Claude Code: ANTHROPIC_BASE_URL=http://localhost:4000 claude --plugin-dir .
 ```
 
 ### Manual Workflow

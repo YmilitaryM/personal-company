@@ -132,9 +132,13 @@ python3.14 scripts/sync-models.py --dry-run  # 预览
 
 ### 第三方模型配置（DeepSeek / OpenAI 等）
 
-`models.json` 只定义模型 ID，真正使用第三方模型需要在启动 Claude Code 前配置环境变量。
+1. 复制并编辑 API key：`cp config/.env.example .env`
+2. 编辑 `config/litellm.yaml` 增删模型
+3. 启动网关：`bash scripts/start.sh`
+4. 打开 `http://localhost:8080/config` 为每个角色分配模型
+5. 启动 Claude Code：`ANTHROPIC_BASE_URL=http://localhost:4000 claude --plugin-dir ~/ai-dev-team`
 
-**方式一：Anthropic 兼容网关（推荐，MCP 工具可用）**
+网关会根据模型名自动路由到不同后端。以下是直接使用环境变量的方式（不用网关）：
 
 Claude Code 支持通过 `ANTHROPIC_BASE_URL` 路由到任何 Anthropic 兼容的后端：
 
@@ -219,20 +223,34 @@ Phase 7: 交付      — 生成交付报告，干系人验收
 - `/pipeline status <project>` — 查看流水线进度
 - `/pipeline cancel <project>` — 取消流水线
 
-### Web Dashboard 实时监控
-
-在浏览器中实时查看所有项目状态：
+### 一键启动所有服务
 
 ```bash
-python3 scripts/web_dashboard.py --port 8080
-# 打开 http://localhost:8080
+bash scripts/start.sh
 ```
+
+自动启动两个服务：
+
+| 服务 | 地址 | 用途 |
+|------|------|------|
+| Web Dashboard | `http://localhost:8080` | 项目监控、进度、评审 |
+| 模型配置页 | `http://localhost:8080/config` | 可视化配置每角色用哪个模型 |
+| Model Gateway | `http://localhost:4000` | 多模型路由（DeepSeek/OpenAI/Anthropic） |
+
+然后启动 Claude Code：
+
+```bash
+ANTHROPIC_BASE_URL=http://localhost:4000 claude --plugin-dir ~/ai-dev-team
+```
+
+> Ctrl+C 一键停止所有服务。
+
+### Web Dashboard 视图
 
 - **公司视图** — 所有项目卡片、进度条、评审状态、活跃流水线
 - **部门视图** — AI/ML、IoT、App&Web 分类查看
 - **项目视图** — 点击进入详情：任务面板、评审门禁、流水线阶段
 - **自动刷新** — 每 30 秒拉取最新数据，无需手动刷新
-- **零依赖** — 纯 Python 标准库，读取 `.index.json` 实时数据
 
 ### 手动工作流
 
@@ -348,12 +366,10 @@ python3.14 mcp-server/server.py
 **Web Dashboard 无法访问**
 
 ```bash
-# 确认端口未被占用
-lsof -i :8080
-# 尝试其他端口
-python3 scripts/web_dashboard.py --port 9090
-# 确认 projects/ 目录存在（Dashboard 读取 .index.json）
-ls projects/.index.json
+# 直接用一键脚本启动所有服务
+bash scripts/start.sh
+# 如果端口被占用，设置环境变量换端口
+WEB_PORT=9090 GATEWAY_PORT=4001 bash scripts/start.sh
 ```
 
 **流水线中断后无法恢复**
