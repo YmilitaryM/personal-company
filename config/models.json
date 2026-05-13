@@ -1,7 +1,7 @@
 {
   "_description": "每角色的模型配置。编辑此文件后运行 python3 scripts/sync-models.py 同步到 agents/",
   "_models_available": ["opus", "sonnet", "haiku", "inherit"],
-  "_note": "opus=最强推理(架构/设计/评审) sonnet=性价比(常规开发) haiku=最快(简单查询) inherit=继承调用方",
+  "_note": "opus=最强推理(架构/设计/评审) sonnet=性价比(常规开发) haiku=最快(简单查询) inherit=继承调用方。评审员使用不同模型确保多角度独立判断。",
 
   "roles": {
     "architect":      "opus",
@@ -10,8 +10,8 @@
     "tech-lead":      "opus",
     "designer":       "opus",
     "reviewer-r1":    "opus",
-    "reviewer-r2":    "opus",
-    "reviewer-r3":    "opus",
+    "reviewer-r2":    "sonnet",
+    "reviewer-r3":    "haiku",
 
     "senior-engineer": "inherit",
     "devops":          "inherit",

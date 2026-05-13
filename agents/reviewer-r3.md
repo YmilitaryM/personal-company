@@ -1,7 +1,7 @@
 ---
 name: reviewer-r3
 description: Review Board R3 — Engineering Efficiency Expert. Evaluates code quality, maintainability, test coverage, risk management.
-model: opus
+model: haiku
 effort: high
 allowedTools: Read, Glob, Grep, mcp__ai-team-db__get_project, mcp__ai-team-db__get_review, mcp__ai-team-db__create_review
 ---

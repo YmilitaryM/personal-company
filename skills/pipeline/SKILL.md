@@ -37,7 +37,12 @@ Read and write `projects/<project>/.pipeline-state.json`:
     "architecture": {"status": "pending|in_progress|done|failed", "completed_at": null},
     "planning": {"status": "pending|in_progress|done|failed", "completed_at": null},
     "development": {"status": "pending|in_progress|done|failed", "tasks_done": 0, "tasks_total": 0},
-    "quality": {"status": "pending|in_progress|done|failed", "gates": {"DG1": "pending", "DG2": "pending", "DG3": "pending", "DG4": "pending"}},
+    "quality": {"status": "pending|in_progress|done|failed", "gates": {
+      "DG1": {"status": "pending", "round": 0, "passed_after_rounds": null},
+      "DG2": {"status": "pending", "round": 0, "passed_after_rounds": null},
+      "DG3": {"status": "pending", "round": 0, "passed_after_rounds": null},
+      "DG4": {"status": "pending", "round": 0, "passed_after_rounds": null}
+    }},
     "delivery": {"status": "pending|in_progress|done|failed", "completed_at": null}
   },
   "started_at": "<iso8601>",
@@ -377,12 +382,50 @@ After each gate, output a gate summary that includes the findings and recommenda
 3. ...
 ```
 
-If changes_requested:
-- Record the required changes
-- Pause pipeline — the user needs to address changes, then `/pipeline resume`
-- Do NOT proceed to next gate
+**If PASS (≥2 approve):**
+- Record the gate as passed
+- Execute **Phase Handoff**: spawn the agent responsible for the NEXT phase with a brief context:
+  - "Gate <X> passed. Key reviewer feedback to carry forward: <summarize top findings>. Proceed with your phase."
+  - This ensures the next team knows what the reviewers flagged, even if it passed.
+- Continue to next gate.
 
-If pass: continue to next gate.
+**If CHANGES_REQUESTED (≥2 changes_requested, or tie):**
+- Do NOT pause for user — auto-rework and re-review (max 3 rounds):
+
+  **Rework Loop (up to 3 rounds):**
+  
+  1. Collect all findings and recommendations from the 3 reviewers into a single Rework Brief
+  2. Determine the responsible agent based on the gate:
+     - **DG1 (方案设计)** → `architect` agent: fix architecture issues, then `tech-lead` agent: update tech spec
+     - **DG2 (核心开发)** → `tech-lead` agent: review findings with engineers, then spawn `senior-engineer` agents to fix code
+     - **DG3 (质量保证)** → `senior-engineer` agents: fix bugs, improve tests, address performance/security issues
+     - **DG4 (待交付)** → `tech-lead` agent: fix deployment issues, improve docs, resolve remaining blockers
+  3. Spawn the responsible agent(s) with:
+     ```
+     Project: <name>
+     Gate: <X> — Rework Round <N>/3
+     Review Findings (must address ALL):
+     <list each finding with severity from reviewers>
+     
+     Recommended Actions:
+     <list each recommendation>
+     
+     Your job: Fix EVERY finding listed above. For each finding, either:
+     - Implement the recommended fix, OR
+     - Write a brief justification if you disagree (will be reviewed again)
+     
+     After fixing, update relevant project files and commit changes.
+     Return: list of what was fixed and how.
+     ```
+  4. After the agent completes, re-trigger the SAME gate review (spawn R1/R2/R3 in parallel again)
+  5. If pass → continue. If changes_requested again → increment round, go to step 1.
+  6. If still changes_requested after 3 rounds → phase_fail("quality", "Gate <X> failed after 3 rework rounds")
+  7. If **REJECT** at any point → phase_fail immediately (reject means fundamental problems, can't fix by iteration)
+
+**If REJECT (≥2 reject):**
+- Record the rejection with all findings
+- phase_fail("quality", "Gate <X> rejected — fundamental issues require stakeholder decision")
+- Do NOT auto-rework (rejection means the approach itself is wrong, not just implementation)
 
 After all 4 gates pass, mark quality `done`.
 
