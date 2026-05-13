@@ -118,7 +118,10 @@ claude plugin install --scope user ~/ai-dev-team
 }
 ```
 
-可选模型：`opus`（最强推理）、`sonnet`（性价比）、`haiku`（最快）、`inherit`（继承调用方）
+可选模型：
+
+- **内置模型**：`opus`（最强推理）、`sonnet`（性价比）、`haiku`（最快）、`inherit`（继承调用方）
+- **自定义模型**：直接填写任意模型 ID，例如 `claude-opus-4-7`、`deepseek-v4-pro` 等。sync 脚本会原样写入 agent 定义，不做限制。
 
 改完后同步到 agent 定义：
 

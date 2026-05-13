@@ -47,9 +47,6 @@ def sync(dry_run: bool = False):
         if role not in ROLE_TO_AGENT:
             print(f"  ⚠ Unknown role: {role} (no matching agent file)")
             continue
-        if model not in available:
-            print(f"  ⚠ Invalid model for {role}: {model} (must be one of {available})")
-            continue
 
         agent_file = AGENTS_DIR / ROLE_TO_AGENT[role]
         if not agent_file.exists():
