@@ -8,13 +8,22 @@ import json
 import os
 import sys
 import time
+import re
 import argparse
 from datetime import datetime
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs
 import socketserver
 socketserver.TCPServer.allow_reuse_address = True
+
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    """Handle requests in separate threads."""
+    daemon_threads = True
+
+# Valid project name pattern — prevents path traversal
+_VALID_NAME_RE = re.compile(r'^[a-zA-Z0-9][-a-zA-Z0-9_]*$')
 
 
 def load_dashboard_data(projects_dir: Path) -> dict:
@@ -264,6 +273,13 @@ footer { text-align: center; padding: 16px; color: var(--text-muted); font-size:
 <footer>Auto-refresh every 30s · Last update: <span id="last-update">—</span></footer>
 
 <script>
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(String(str)));
+  return div.innerHTML;
+}
+
 let currentView = 'company';
 let currentDept = '';
 let currentProject = '';
@@ -335,7 +351,7 @@ function renderCompany() {
       const ps = pipelineData[name];
       const phase = ps ? Object.entries(ps.phases || {}).filter(([k,v]) => v.status==='done').length : 0;
       html += '<span style="background:#1c2838;padding:4px 12px;border-radius:12px;font-size:12px;color:var(--accent)">' +
-        name + ' · Phase ' + phase + '/7</span>';
+        escapeHtml(name) + ' · Phase ' + phase + '/7</span>';
     });
     html += '</div>';
   }
@@ -368,9 +384,9 @@ function renderDepartment() {
     statCard('Avg Progress', avg + '%', 'accent') +
     statCard('Blockers', projects.reduce((s,p) => s + (p.blockers||[]).length, 0), 'yellow') +
     '</div>';
-  html += '<div class="section-title">' + currentDept + ' Projects</div>';
+  html += '<div class="section-title">' + escapeHtml(currentDept) + ' Projects</div>';
   if (projects.length === 0) {
-    html += '<div class="empty-state"><h3>No projects in ' + currentDept + '</h3></div>';
+    html += '<div class="empty-state"><h3>No projects in ' + escapeHtml(currentDept) + '</h3></div>';
   } else {
     html += '<div class="project-grid">';
     projects.forEach(p => html += projectCard(p));
@@ -382,24 +398,24 @@ function renderDepartment() {
 
 function renderProject() {
   const p = (dashboardData.projects || []).find(x => x.name === currentProject);
-  if (!p) { document.getElementById('main').innerHTML = '<div class="error-banner">Project not found: ' + currentProject + '</div>'; return; }
+  if (!p) { document.getElementById('main').innerHTML = '<div class="error-banner">Project not found: ' + escapeHtml(currentProject) + '</div>'; return; }
   const pipe = pipelineData ? pipelineData[currentProject] : null;
 
   const progressColor = (p.overall_progress || 0) >= 80 ? 'green' : (p.overall_progress || 0) >= 40 ? 'accent' : 'yellow';
   const reviewHtml = (p.reviews || []).map(r => '<tr>' +
-    '<td>' + r.gate + '</td>' +
-    '<td><span class="badge ' + r.status + '">' + r.status.replace('_',' ') + '</span></td>' +
-    '<td>' + (r.r1_vote || '—') + (r.r1_score ? ' ('+r.r1_score+')' : '') + '</td>' +
-    '<td>' + (r.r2_vote || '—') + (r.r2_score ? ' ('+r.r2_score+')' : '') + '</td>' +
-    '<td>' + (r.r3_vote || '—') + (r.r3_score ? ' ('+r.r3_score+')' : '') + '</td>' +
+    '<td>' + escapeHtml(r.gate) + '</td>' +
+    '<td><span class="badge ' + escapeHtml(r.status) + '">' + escapeHtml(r.status.replace('_',' ')) + '</span></td>' +
+    '<td>' + escapeHtml(r.r1_vote || '—') + (r.r1_score ? ' ('+escapeHtml(String(r.r1_score))+')' : '') + '</td>' +
+    '<td>' + escapeHtml(r.r2_vote || '—') + (r.r2_score ? ' ('+escapeHtml(String(r.r2_score))+')' : '') + '</td>' +
+    '<td>' + escapeHtml(r.r3_vote || '—') + (r.r3_score ? ' ('+escapeHtml(String(r.r3_score))+')' : '') + '</td>' +
     '</tr>').join('');
 
   const taskTotal = (p.tasks.done||0) + (p.tasks.in_progress||0) + (p.tasks.todo||0) + (p.tasks.blocked||0);
   const taskPct = taskTotal > 0 ? Math.round((p.tasks.done||0) / taskTotal * 100) : 0;
 
-  let html = '<button class="back-btn" onclick="backToList()">← ' + (currentDept ? currentDept : 'Company') + '</button>';
-  html += '<div class="detail-header"><h2>' + p.name + '</h2>';
-  html += '<span class="subtitle">' + (p.direction||'—') + ' · TL: ' + (p.tech_lead||'—') + ' · Phase: ' + (p.phase||'—') + '</span></div>';
+  let html = '<button class="back-btn" onclick="backToList()">← ' + escapeHtml(currentDept ? currentDept : 'Company') + '</button>';
+  html += '<div class="detail-header"><h2>' + escapeHtml(p.name) + '</h2>';
+  html += '<span class="subtitle">' + escapeHtml(p.direction||'—') + ' · TL: ' + escapeHtml(p.tech_lead||'—') + ' · Phase: ' + escapeHtml(p.phase||'—') + '</span></div>';
 
   html += '<div class="stats-bar">' +
     statCard('Progress', (p.overall_progress||0) + '%', progressColor) +
@@ -460,7 +476,7 @@ function renderProject() {
   const blockers = p.blockers || [];
   if (blockers.length > 0) {
     html += '<div class="detail-card"><h4>Blockers</h4><ul class="blocker-list">';
-    blockers.forEach(b => { html += '<li>' + (typeof b === 'string' ? b : JSON.stringify(b)) + '</li>'; });
+    blockers.forEach(b => { html += '<li>' + escapeHtml(typeof b === 'string' ? b : JSON.stringify(b)) + '</li>'; });
     html += '</ul></div>';
   }
 
@@ -470,30 +486,30 @@ function renderProject() {
 }
 
 function statCard(label, value, color) {
-  return '<div class="stat-card"><div class="label">' + label + '</div><div class="value ' + color + '">' + value + '</div></div>';
+  return '<div class="stat-card"><div class="label">' + escapeHtml(label) + '</div><div class="value ' + color + '">' + escapeHtml(String(value)) + '</div></div>';
 }
 
 function taskRow(label, count, color) {
-  return '<div class="task-row"><span>' + label + '</span><span class="count" style="color:' + color + '">' + count + '</span></div>';
+  return '<div class="task-row"><span>' + escapeHtml(label) + '</span><span class="count" style="color:' + color + '">' + count + '</span></div>';
 }
 
 function projectCard(p) {
   const progressColor = (p.overall_progress || 0) >= 80 ? 'green' : (p.overall_progress || 0) >= 40 ? 'accent' : 'yellow';
   const badges = (p.reviews || []).map(r => {
     const cls = r.status === 'passed' ? 'passed' : r.status === 'rejected' ? 'rejected' : r.status === 'in_review' ? 'in_review' : 'pending';
-    return '<span class="badge ' + cls + '">' + r.gate + '</span>';
+    return '<span class="badge ' + cls + '">' + escapeHtml(r.gate) + '</span>';
   }).join('');
   const hasPipeline = pipelineData && pipelineData[p.name];
   let pipeHtml = '';
   if (hasPipeline) {
     const ps = pipelineData[p.name];
     const doneCount = Object.values(ps.phases || {}).filter(ph => ph.status === 'done').length;
-    pipeHtml = '<div class="pipeline-bar">Pipeline: Phase ' + doneCount + '/7 · ' + (ps.current_phase || '') + '</div>';
+    pipeHtml = '<div class="pipeline-bar">Pipeline: Phase ' + doneCount + '/7 · ' + escapeHtml(ps.current_phase || '') + '</div>';
   }
-  return '<div class="project-card" onclick="showProject(\'' + p.name + '\')">' +
-    '<div class="card-header"><h3>' + p.name + '</h3><span class="direction-tag">' + (p.direction || '—') + '</span></div>' +
+  return '<div class="project-card" onclick="showProject(\'' + escapeHtml(p.name).replace(/'/g, '&#39;') + '\')">' +
+    '<div class="card-header"><h3>' + escapeHtml(p.name) + '</h3><span class="direction-tag">' + escapeHtml(p.direction || '—') + '</span></div>' +
     '<div class="progress-bar"><div class="progress-fill ' + progressColor + '" style="width:' + (p.overall_progress||0) + '%"></div></div>' +
-    '<div class="card-meta"><span>Phase: ' + (p.phase||'—') + '</span><span>' + (p.overall_progress||0) + '%</span><span>TL: ' + (p.tech_lead||'—') + '</span></div>' +
+    '<div class="card-meta"><span>Phase: ' + escapeHtml(p.phase||'—') + '</span><span>' + (p.overall_progress||0) + '%</span><span>TL: ' + escapeHtml(p.tech_lead||'—') + '</span></div>' +
     '<div class="review-badges">' + badges + '</div>' +
     pipeHtml +
     '</div>';
@@ -620,11 +636,11 @@ async function loadConfig() {
     const model = models[role] || 'inherit';
     const datalistId = 'dl-' + role;
     html += '<div class="config-row">' +
-      '<div class="role-info"><div class="role-name">' + role + '</div><div class="role-desc">' + desc + '</div></div>' +
+      '<div class="role-info"><div class="role-name">' + escapeHtml(role) + '</div><div class="role-desc">' + escapeHtml(desc) + '</div></div>' +
       '<div class="model-input">' +
-      '<input list="' + datalistId + '" id="role-' + role + '" value="' + model + '" onchange="markChanged(\'' + role + '\')">' +
-      '<datalist id="' + datalistId + '">' + available.map(m => '<option value="' + m + '">').join('') + '</datalist>' +
-      '<span class="current-badge">' + model + '</span>' +
+      '<input list="' + datalistId + '" id="role-' + escapeHtml(role) + '" value="' + escapeHtml(model) + '" onchange="markChanged(\'' + escapeHtml(role) + '\')">' +
+      '<datalist id="' + datalistId + '">' + available.map(m => '<option value="' + escapeHtml(m) + '">').join('') + '</datalist>' +
+      '<span class="current-badge">' + escapeHtml(model) + '</span>' +
       '</div></div>';
   }
   form.innerHTML = html;
@@ -786,6 +802,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if not project:
                 self._send_json({'error': 'Missing project parameter'}, 400)
                 return
+            if not _VALID_NAME_RE.match(project):
+                self._send_json({'error': 'Invalid project name'}, 400)
+                return
             state = load_pipeline_state(self.projects_dir, project)
             if state:
                 self._send_json(state)
@@ -899,7 +918,7 @@ def main():
     projects_dir = Path(args.project_dir) / 'projects'
     DashboardHandler.projects_dir = projects_dir
 
-    server = HTTPServer(('0.0.0.0', args.port), DashboardHandler)
+    server = ThreadingHTTPServer(('0.0.0.0', args.port), DashboardHandler)
     server.verbose = args.verbose
 
     print(f'AI Dev Team Dashboard')

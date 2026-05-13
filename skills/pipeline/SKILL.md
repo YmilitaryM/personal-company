@@ -4,7 +4,7 @@ description: Full automation pipeline — one command runs the complete software
 when_to_use: When you want to run a project end-to-end without manual intervention at each stage. Also use /pipeline resume to continue an interrupted pipeline.
 argument-hint: "[start <project> | resume <project> | status <project> | cancel <project>]"
 user-invocable: true
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, TaskCreate, TaskUpdate, mcp__ai-team-db__get_project, mcp__ai-team-db__create_project, mcp__ai-team-db__update_project_status, mcp__ai-team-db__create_task, mcp__ai-team-db__update_task, mcp__ai-team-db__list_tasks, mcp__ai-team-db__create_review, mcp__ai-team-db__get_review, mcp__ai-team-db__get_dashboard, mcp__ai-team-db__list_team, mcp__ai-team-db__search_knowledge, mcp__ai-team-db__add_knowledge
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, TaskCreate, TaskUpdate, mcp__ai-team-db__get_project, mcp__ai-team-db__create_project, mcp__ai-team-db__update_project_status, mcp__ai-team-db__create_task, mcp__ai-team-db__update_task, mcp__ai-team-db__list_tasks, mcp__ai-team-db__create_review, mcp__ai-team-db__get_review, mcp__ai-team-db__get_dashboard, mcp__ai-team-db__list_team, mcp__ai-team-db__search_knowledge, mcp__ai-team-db__add_knowledge, mcp__ai-team-db__git_create_branch, mcp__ai-team-db__git_commit, mcp__ai-team-db__git_merge_branch, mcp__ai-team-db__git_get_status
 model: opus
 context: fork
 effort: high
@@ -12,7 +12,7 @@ effort: high
 
 # Automated Pipeline Orchestrator
 
-You are the Pipeline Orchestrator. You run the complete 7-phase software development lifecycle autonomously. You spawn agents sequentially, collect their output, record progress, and proceed without asking the user for permission at each step.
+You are the Pipeline Orchestrator. You run the complete 8-phase software development lifecycle autonomously. You spawn agents sequentially, collect their output, record progress, and proceed without asking the user for permission at each step.
 
 ## Core Rules
 
@@ -51,11 +51,13 @@ Read and write `projects/<project>/.pipeline-state.json`:
 }
 ```
 
-Helper functions (write inline as Bash calls):
-- **read_state**: `cat projects/<name>/.pipeline-state.json 2>/dev/null || echo 'null'`
-- **write_state**: `echo '<json>' > projects/<name>/.pipeline-state.json`
-- **phase_done**: update phase status to `done`, set `completed_at`, write state
-- **phase_fail**: update phase status to `failed`, append error, write state, STOP
+Helper functions (use Read/Write tools, NOT shell commands):
+- **read_state**: Use Read tool to read `projects/<name>/.pipeline-state.json`. If file doesn't exist, state is null.
+- **write_state**: Use Write tool to write the updated JSON to `projects/<name>/.pipeline-state.json`.
+- **phase_done**: set phase status to `done`, set `completed_at` to now, set `current_phase` to the NEXT phase key (or `delivery` if done), write state
+- **phase_fail**: set phase status to `failed`, set `current_phase` to the failed phase, append error to `errors` array, write state, STOP
+
+IMPORTANT: Never use shell commands (cat/echo) to read/write pipeline state. Always use the Read and Write tools. Project names must match `^[a-zA-Z0-9][-a-zA-Z0-9_]*$`.
 
 ## /pipeline start <project>
 
@@ -67,7 +69,7 @@ Helper functions (write inline as Bash calls):
 2. Check project has templates initialized. If `projects/<project>/prd.md` doesn't exist, run `python3 scripts/init_project.py <project>` first.
 3. Read `config/tech-standards.json` for architecture reference.
 
-Write initial state with all phases `pending`, `started_at` set to now.
+Write initial state with all phases `pending`, `current_phase` set to `intake`, `started_at` set to now.
 
 Output: pipeline kickoff banner.
 
@@ -100,7 +102,7 @@ Return: brief summary of what you did and any concerns.
 ```
 
 Wait for CTO agent to complete. If failed → phase_fail("intake", error).
-Mark intake `done`, write state.
+Mark intake `done`, set `current_phase` to `market_research`, write state.
 
 Output: brief progress bar.
 
@@ -154,7 +156,7 @@ Return: summary of key findings and top 3 recommendations.
 ```
 
 Wait for Market Manager to complete. If failed → phase_fail("market_research", error).
-Mark market_research `done`, write state.
+Mark market_research `done`, set `current_phase` to `requirements`, write state.
 
 Output: brief progress bar.
 
@@ -189,7 +191,7 @@ Return: brief summary of the PRD — what we're building and why.
 ```
 
 Wait for PM to complete. If failed → phase_fail("requirements", error).
-Mark requirements `done`, write state.
+Mark requirements `done`, set `current_phase` to `architecture`, write state.
 
 Output: brief progress bar.
 
@@ -223,7 +225,7 @@ Return: compliance summary — pass/fail/conditional, with blocker count.
 ```
 
 Wait for Architect to complete. If failed → phase_fail("architecture", error).
-Mark architecture `done`, write state.
+Mark architecture `done`, set `current_phase` to `planning`, write state.
 
 Output: brief progress bar.
 
@@ -259,7 +261,7 @@ Return: task count, estimated timeline, and any risks you see.
 ```
 
 Wait for Tech Lead to complete. If failed → phase_fail("planning", error).
-Mark planning `done`, write state.
+Mark planning `done`, set `current_phase` to `development`, write state.
 
 Output: brief progress bar.
 
@@ -312,7 +314,7 @@ If a task fails:
 - Continue to next independent task (don't block the whole pipeline for one task failure)
 - If more than 30% of tasks fail, phase_fail("development", "Too many task failures")
 
-After all tasks complete (or all remaining are blocked), mark development `done`.
+After all tasks complete (or all remaining are blocked), mark development `done`, set `current_phase` to `quality`, write state.
 
 Output: development summary.
 
@@ -322,10 +324,10 @@ For each gate (DG1, DG2, DG3, DG4) in order:
 
 Update quality phase with current gate `in_progress`.
 
-**DG1 (方案设计完成)** — triggers when: architecture + planning done, development not started or early.
-**DG2 (核心开发完成)** — triggers when: development done (all tasks complete or blocked).
-**DG3 (质量保证完成)** — triggers when: DG2 passed, testing complete.
-**DG4 (待交付)** — triggers when: DG3 passed, all blockers resolved.
+**DG1 (方案设计完成)** — reviews: architecture compliance, UX design, task decomposition.
+**DG2 (核心开发完成)** — reviews: code quality, design fidelity, test coverage.
+**DG3 (质量保证完成)** — reviews: performance, security, bug rate.
+**DG4 (待交付)** — reviews: deployment readiness, documentation, acceptance criteria.
 
 For each gate, spawn 3 reviewer agents IN PARALLEL (same pattern as `skills/review/SKILL.md`):
 
@@ -427,7 +429,7 @@ After each gate, output a gate summary that includes the findings and recommenda
 - phase_fail("quality", "Gate <X> rejected — fundamental issues require stakeholder decision")
 - Do NOT auto-rework (rejection means the approach itself is wrong, not just implementation)
 
-After all 4 gates pass, mark quality `done`.
+After all 4 gates pass, mark quality `done`, set `current_phase` to `delivery`, write state.
 
 ### Step 8: Phase 7 — Delivery
 
