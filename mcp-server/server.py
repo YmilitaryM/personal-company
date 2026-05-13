@@ -1,0 +1,904 @@
+#!/usr/bin/env python3
+"""
+AI Team MCP Server — Structured data storage and querying for the AI dev team plugin.
+
+Provides tools for:
+- Project CRUD
+- Task management
+- Review records
+- Dashboard data aggregation
+
+Data is stored alongside the existing projects/ markdown files for dual compatibility.
+"""
+
+import fcntl
+import json
+import os
+import re
+import sys
+import time
+from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+from mcp.server import Server, InitializationOptions
+from mcp.server.stdio import stdio_server
+from mcp.types import Tool, TextContent, ServerCapabilities, ToolsCapability
+
+# Import extended tools from same directory
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from extended import (EXTENDED_TOOL_DEFS, create_sprint, update_sprint, list_sprints,
+                      log_meeting, list_meetings, add_knowledge, search_knowledge,
+                      generate_report, create_handoff, list_handoffs, update_handoff,
+                      git_create_branch, git_commit, git_get_status, git_merge_branch)
+
+# Import project initializer
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'scripts'))
+from init_project import init_project as _init_project
+
+# --- Configuration ---
+PROJECT_DIR = Path(os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd()))
+PROJECTS_DIR = PROJECT_DIR / 'projects'
+INDEX_FILE = PROJECTS_DIR / '.index.json'
+LOCK_FILE = PROJECTS_DIR / '.index.lock'
+LOCK_TIMEOUT = 5  # seconds
+REVIEW_DIR_TEMPLATE = 'reviews'
+SAFE_NAME_RE = re.compile(r'^[a-zA-Z0-9_\-.]+$')
+
+
+def _validate_project_name(name: str) -> bool:
+    """Validate that a project name is safe (no path traversal)."""
+    if name in ('.', '..'):
+        return False
+    return bool(SAFE_NAME_RE.match(name)) and '..' not in name and '/' not in name
+
+
+# --- File Lock ---
+@contextmanager
+def _index_lock():
+    """Context manager for exclusive access to the index file."""
+    ensure_dirs()
+    lock_fd = open(LOCK_FILE, 'w')
+    deadline = time.time() + LOCK_TIMEOUT
+    while True:
+        try:
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            if time.time() > deadline:
+                lock_fd.close()
+                raise TimeoutError(f'Could not acquire index lock within {LOCK_TIMEOUT}s')
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+        lock_fd.close()
+
+
+# --- Helpers ---
+def ensure_dirs():
+    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def load_index() -> dict:
+    ensure_dirs()
+    with _index_lock():
+        if INDEX_FILE.exists():
+            return json.loads(INDEX_FILE.read_text())
+        return {'projects': {}, 'team': _default_team()}
+
+
+def save_index(data: dict):
+    ensure_dirs()
+    data['updated_at'] = datetime.now().isoformat()
+    with _index_lock():
+        INDEX_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def _default_team():
+    return {
+        'members': {
+            'cto': {'name': 'CTO', 'status': 'active', 'load': 100, 'assigned_projects': []},
+            'pm_a': {'name': 'PM-A (AI/ML)', 'status': 'active', 'load': 0, 'assigned_projects': []},
+            'pm_b': {'name': 'PM-B (IoT)', 'status': 'active', 'load': 0, 'assigned_projects': []},
+            'pm_c': {'name': 'PM-C (App&Web)', 'status': 'active', 'load': 0, 'assigned_projects': []},
+            'tl_a': {'name': 'TL-A (AI/ML)', 'status': 'active', 'load': 0, 'assigned_projects': []},
+            'tl_b': {'name': 'TL-B (IoT)', 'status': 'active', 'load': 0, 'assigned_projects': []},
+            'tl_c': {'name': 'TL-C (App&Web)', 'status': 'active', 'load': 0, 'assigned_projects': []},
+            'market': {'name': 'Market Manager', 'status': 'active', 'load': 50, 'assigned_projects': []},
+            'devops_1': {'name': 'DevOps-1', 'status': 'active', 'load': 0, 'assigned_projects': []},
+            'devops_2': {'name': 'DevOps-2', 'status': 'active', 'load': 0, 'assigned_projects': []},
+        },
+        'pools': {
+            'senior_engineer': {'total': 12, 'assigned': 0, 'idle': 12},
+            'ml_engineer': {'total': 2, 'assigned': 0, 'idle': 2},
+            'iot_engineer': {'total': 2, 'assigned': 0, 'idle': 2},
+            'agent_engineer': {'total': 2, 'assigned': 0, 'idle': 2},
+            'designer': {'total': 4, 'assigned': 0, 'idle': 4},
+            'reviewer': {'total': 3, 'assigned': 0, 'idle': 3},
+        }
+    }
+
+
+# --- Server Setup ---
+server = Server("ai-team-db")
+
+
+@server.list_tools()
+async def list_tools() -> list[Tool]:
+    tools = [
+        Tool(
+            name="list_projects",
+            description="List all projects with basic status information",
+            inputSchema={"type": "object", "properties": {}, "required": []}
+        ),
+        Tool(
+            name="get_project",
+            description="Get detailed information for a specific project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string", "description": "Project directory name"}
+                },
+                "required": ["project_name"]
+            }
+        ),
+        Tool(
+            name="create_project",
+            description="Create a new project and initialize its structure",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Project name (used as directory name)"},
+                    "direction": {"type": "string", "description": "Product direction: ML, IoT, Agent, or App&Web"},
+                    "description": {"type": "string", "description": "Brief project description"},
+                    "tech_lead": {"type": "string", "description": "Assigned Tech Lead"},
+                    "pm": {"type": "string", "description": "Assigned PM"},
+                    "target_date": {"type": "string", "description": "Target delivery date (YYYY-MM-DD)"}
+                },
+                "required": ["name", "direction", "description"]
+            }
+        ),
+        Tool(
+            name="update_project_status",
+            description="Update a project's status",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string"},
+                    "phase": {"type": "string", "description": "Current phase: 需求分析, 方案设计, 开发实现, 测试评审, 交付验收"},
+                    "phase_progress": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "overall_progress": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "status": {"type": "string", "description": "🟢正常, 🟡有风险, or 🔴严重延迟"},
+                    "blockers": {"type": "array", "items": {"type": "string"}},
+                    "this_week_done": {"type": "array", "items": {"type": "string"}},
+                    "next_week_plan": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["project_name"]
+            }
+        ),
+        Tool(
+            name="create_task",
+            description="Create a new task in a project. Optionally specify files to claim ownership and prevent conflicts.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string"},
+                    "title": {"type": "string"},
+                    "assignee": {"type": "string"},
+                    "estimated_hours": {"type": "number"},
+                    "priority": {"type": "string", "enum": ["P0", "P1", "P2", "P3"]},
+                    "status": {"type": "string", "enum": ["todo", "in_progress", "blocked", "done"], "default": "todo"},
+                    "blocked_reason": {"type": "string"},
+                    "files": {"type": "array", "items": {"type": "string"}, "description": "Source files this task claims. Conflicts with files in other active tasks are rejected."},
+                },
+                "required": ["project_name", "title"]
+            }
+        ),
+        Tool(
+            name="update_task",
+            description="Update a task's status",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string"},
+                    "task_id": {"type": "string"},
+                    "status": {"type": "string", "enum": ["todo", "in_progress", "blocked", "done"]},
+                    "assignee": {"type": "string"},
+                    "blocked_reason": {"type": "string"},
+                },
+                "required": ["project_name", "task_id"]
+            }
+        ),
+        Tool(
+            name="list_tasks",
+            description="List all tasks for a project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string"},
+                    "status_filter": {"type": "string", "enum": ["todo", "in_progress", "blocked", "done"]}
+                },
+                "required": ["project_name"]
+            }
+        ),
+        Tool(
+            name="create_review",
+            description="Record a review for a project stage gate",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string"},
+                    "gate": {"type": "string", "enum": ["DG1", "DG2", "DG3", "DG4"]},
+                    "reviewer": {"type": "string", "enum": ["R1", "R2", "R3"]},
+                    "vote": {"type": "string", "enum": ["approve", "changes_requested", "reject"]},
+                    "score": {"type": "number", "minimum": 0, "maximum": 10},
+                    "findings": {"type": "array", "items": {"type": "string"}},
+                    "recommendations": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["project_name", "gate", "reviewer", "vote"]
+            }
+        ),
+        Tool(
+            name="get_review",
+            description="Get review status for a project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string"},
+                    "gate": {"type": "string", "enum": ["DG1", "DG2", "DG3", "DG4"]}
+                },
+                "required": ["project_name"]
+            }
+        ),
+        Tool(
+            name="get_dashboard",
+            description="Get aggregated dashboard data (company, department, or project level)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "level": {"type": "string", "enum": ["company", "department", "project"]},
+                    "name": {"type": "string", "description": "Department or project name (required for department/project level)"}
+                },
+                "required": ["level"]
+            }
+        ),
+        Tool(
+            name="update_team_member",
+            description="Update team member status and load",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "member_id": {"type": "string"},
+                    "status": {"type": "string", "enum": ["active", "standby", "idle", "overload", "leave"]},
+                    "load": {"type": "integer", "minimum": 0, "maximum": 150},
+                    "assigned_projects": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["member_id"]
+            }
+        ),
+        Tool(
+            name="list_team",
+            description="List all team members and their status",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
+    ]
+    # Append extended tools (Sprint, Meetings, Knowledge Base, Reports)
+    for td in EXTENDED_TOOL_DEFS:
+        tools.append(Tool(**td))
+    return tools
+
+
+@server.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    index = load_index()
+
+    if name == "list_projects":
+        projects = []
+        for pname, pdata in index.get('projects', {}).items():
+            projects.append({
+                'name': pname,
+                'direction': pdata.get('direction', 'Unknown'),
+                'phase': pdata.get('phase', 'Unknown'),
+                'progress': pdata.get('overall_progress', 0),
+                'status': pdata.get('status', '🟢正常'),
+                'tech_lead': pdata.get('tech_lead', 'Unassigned'),
+                'target_date': pdata.get('target_date', ''),
+                'blockers': len(pdata.get('blockers', [])),
+            })
+        return [TextContent(type="text", text=json.dumps(projects, ensure_ascii=False, indent=2))]
+
+    elif name == "get_project":
+        pname = arguments['project_name']
+        pdata = index['projects'].get(pname, {})
+        if not pdata:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        return [TextContent(type="text", text=json.dumps(pdata, ensure_ascii=False, indent=2))]
+
+    elif name == "create_project":
+        pname = arguments['name']
+        if not _validate_project_name(pname):
+            return [TextContent(type="text", text=json.dumps({'error': 'Invalid project name: use only letters, numbers, hyphens, underscores, dots'}, ensure_ascii=False))]
+        if pname in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} already exists'}, ensure_ascii=False))]
+
+        # Initialize template files via init_project
+        init_result = _init_project(
+            name=pname,
+            direction=arguments.get('direction', 'Unknown'),
+            description=arguments.get('description', ''),
+            pm=arguments.get('pm', 'Unassigned'),
+            tl=arguments.get('tech_lead', 'Unassigned'),
+            target_date=arguments.get('target_date', ''),
+        )
+        if 'error' in init_result:
+            return [TextContent(type="text", text=json.dumps(init_result, ensure_ascii=False))]
+
+        # Ensure reviews directory
+        reviews_dir = PROJECTS_DIR / pname / REVIEW_DIR_TEMPLATE
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+
+        now = datetime.now().isoformat()
+        pdata = {
+            'name': pname,
+            'direction': arguments.get('direction', 'Unknown'),
+            'description': arguments.get('description', ''),
+            'tech_lead': arguments.get('tech_lead', 'Unassigned'),
+            'pm': arguments.get('pm', 'Unassigned'),
+            'target_date': arguments.get('target_date', ''),
+            'start_date': datetime.now().strftime('%Y-%m-%d'),
+            'phase': '需求分析',
+            'phase_progress': 0,
+            'overall_progress': 0,
+            'status': '🟢正常',
+            'blockers': [],
+            'this_week_done': [],
+            'next_week_plan': [],
+            'tasks': [],
+            'reviews': {'DG1': {}, 'DG2': {}, 'DG3': {}, 'DG4': {}},
+            'created_at': now,
+            'updated_at': now,
+        }
+        index['projects'][pname] = pdata
+        save_index(index)
+
+        return [TextContent(type="text", text=json.dumps({'success': True, 'project': pdata, 'files_created': init_result.get('files_created', [])}, ensure_ascii=False, indent=2))]
+
+    elif name == "update_project_status":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+
+        pdata = index['projects'][pname]
+        for field in ['phase', 'phase_progress', 'overall_progress', 'status', 'blockers', 'this_week_done', 'next_week_plan']:
+            if field in arguments:
+                pdata[field] = arguments[field]
+        pdata['updated_at'] = datetime.now().isoformat()
+
+        save_index(index)
+        _write_status_md(PROJECTS_DIR / pname, pdata)
+
+        return [TextContent(type="text", text=json.dumps({'success': True, 'project': pdata}, ensure_ascii=False, indent=2))]
+
+    elif name == "create_task":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+
+        # File conflict detection
+        task_files = arguments.get('files', [])
+        if task_files:
+            conflicts = []
+            for existing in index['projects'][pname].get('tasks', []):
+                if existing.get('status') in ('todo', 'in_progress', 'blocked'):
+                    existing_files = existing.get('files', [])
+                    overlap = set(task_files) & set(existing_files)
+                    if overlap:
+                        conflicts.append({
+                            'task_id': existing['id'],
+                            'task_title': existing['title'],
+                            'assignee': existing.get('assignee', '—'),
+                            'conflicting_files': list(overlap),
+                        })
+            if conflicts:
+                return [TextContent(type="text", text=json.dumps({
+                    'error': 'File conflict detected',
+                    'conflicts': conflicts,
+                    'hint': 'These files are already owned by active tasks. Reassign or close those tasks first.',
+                }, ensure_ascii=False, indent=2))]
+
+        task = {
+            'id': f"TASK-{datetime.now().strftime('%Y%m%d%H%M%S')}-{len(index['projects'][pname].get('tasks', [])) + 1:03d}",
+            'title': arguments['title'],
+            'assignee': arguments.get('assignee', 'Unassigned'),
+            'estimated_hours': arguments.get('estimated_hours', 0),
+            'priority': arguments.get('priority', 'P2'),
+            'status': arguments.get('status', 'todo'),
+            'blocked_reason': arguments.get('blocked_reason', ''),
+            'files': task_files,
+            'created_at': datetime.now().isoformat(),
+        }
+        index['projects'][pname].setdefault('tasks', []).append(task)
+        save_index(index)
+        _write_tasks_md(PROJECTS_DIR / pname, index['projects'][pname]['tasks'])
+
+        return [TextContent(type="text", text=json.dumps({'success': True, 'task': task}, ensure_ascii=False, indent=2))]
+
+    elif name == "update_task":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+
+        task_id = arguments['task_id']
+        for task in index['projects'][pname].get('tasks', []):
+            if task['id'] == task_id:
+                for field in ['status', 'assignee', 'blocked_reason']:
+                    if field in arguments:
+                        task[field] = arguments[field]
+                task['updated_at'] = datetime.now().isoformat()
+                save_index(index)
+                _write_tasks_md(PROJECTS_DIR / pname, index['projects'][pname]['tasks'])
+                return [TextContent(type="text", text=json.dumps({'success': True, 'task': task}, ensure_ascii=False, indent=2))]
+
+        return [TextContent(type="text", text=json.dumps({'error': f'Task {task_id} not found'}, ensure_ascii=False))]
+
+    elif name == "list_tasks":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+
+        tasks = index['projects'][pname].get('tasks', [])
+        status_filter = arguments.get('status_filter')
+        if status_filter:
+            tasks = [t for t in tasks if t.get('status') == status_filter]
+
+        return [TextContent(type="text", text=json.dumps(tasks, ensure_ascii=False, indent=2))]
+
+    elif name == "create_review":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+
+        gate = arguments['gate']
+        reviewer = arguments['reviewer']
+
+        review_entry = {
+            'reviewer': reviewer,
+            'vote': arguments['vote'],
+            'score': arguments.get('score', 0),
+            'findings': arguments.get('findings', []),
+            'recommendations': arguments.get('recommendations', []),
+            'date': datetime.now().isoformat(),
+        }
+        index['projects'][pname].setdefault('reviews', {}).setdefault(gate, {})[reviewer] = review_entry
+        save_index(index)
+        _write_review_md(PROJECTS_DIR / pname, gate, index['projects'][pname]['reviews'][gate])
+
+        return [TextContent(type="text", text=json.dumps({'success': True, 'review': review_entry}, ensure_ascii=False, indent=2))]
+
+    elif name == "get_review":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+
+        reviews = index['projects'][pname].get('reviews', {})
+        gate = arguments.get('gate')
+        if gate:
+            reviews = {gate: reviews.get(gate, {})}
+
+        return [TextContent(type="text", text=json.dumps(reviews, ensure_ascii=False, indent=2))]
+
+    elif name == "get_dashboard":
+        level = arguments['level']
+        if level == 'company':
+            dashboard = _build_company_dashboard(index)
+        elif level == 'project':
+            pname = arguments.get('name', '')
+            dashboard = _build_project_dashboard(index, pname)
+        elif level == 'department':
+            dname = arguments.get('name', '')
+            dashboard = _build_department_dashboard(index, dname)
+        else:
+            dashboard = {'error': f'Unknown level: {level}'}
+
+        return [TextContent(type="text", text=json.dumps(dashboard, ensure_ascii=False, indent=2))]
+
+    elif name == "update_team_member":
+        member_id = arguments['member_id']
+        member = index['team']['members'].get(member_id)
+        if not member:
+            # Check pools
+            pool = index['team']['pools'].get(member_id)
+            if pool:
+                for field in ['assigned', 'idle']:
+                    if field in arguments:
+                        pool[field] = arguments[field]
+                save_index(index)
+                return [TextContent(type="text", text=json.dumps({'success': True, 'pool': pool}, ensure_ascii=False, indent=2))]
+            return [TextContent(type="text", text=json.dumps({'error': f'Member {member_id} not found'}, ensure_ascii=False))]
+
+        for field in ['status', 'load', 'assigned_projects']:
+            if field in arguments:
+                member[field] = arguments[field]
+        save_index(index)
+        return [TextContent(type="text", text=json.dumps({'success': True, 'member': member}, ensure_ascii=False, indent=2))]
+
+    elif name == "list_team":
+        return [TextContent(type="text", text=json.dumps(index.get('team', {}), ensure_ascii=False, indent=2))]
+
+    # ─── Extended Tools: Sprint, Meetings, KB, Reports ───
+    elif name == "create_sprint":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        project_path = PROJECTS_DIR / pname
+        result = create_sprint(project_path, arguments['sprint_num'],
+                               arguments['start_date'], arguments['end_date'],
+                               arguments.get('goal', ''))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "update_sprint":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = update_sprint(PROJECTS_DIR / pname, arguments['sprint_num'],
+                               **{k: v for k, v in arguments.items()
+                                  if k not in ('project_name', 'sprint_num')})
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "list_sprints":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = list_sprints(PROJECTS_DIR / pname)
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "log_meeting":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = log_meeting(PROJECTS_DIR / pname, arguments['meeting_type'],
+                             arguments['summary'],
+                             arguments.get('decisions', []),
+                             arguments.get('action_items', []),
+                             arguments.get('attendees', []))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "list_meetings":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = list_meetings(PROJECTS_DIR / pname, arguments.get('meeting_type'))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "add_knowledge":
+        result = add_knowledge(PROJECT_DIR, arguments['topic'], arguments['content'],
+                               arguments.get('tags', []), arguments.get('author', ''),
+                               arguments.get('related_project', ''))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "search_knowledge":
+        result = search_knowledge(PROJECT_DIR, arguments.get('query', ''),
+                                  arguments.get('tags'))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "create_handoff":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = create_handoff(PROJECTS_DIR / pname, arguments['from_role'],
+                                arguments['to_role'], arguments['content'],
+                                arguments.get('deliverable', ''),
+                                arguments.get('acceptance_criteria', []))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "list_handoffs":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = list_handoffs(PROJECTS_DIR / pname, arguments.get('status'))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "update_handoff":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = update_handoff(PROJECTS_DIR / pname, arguments['handoff_id'],
+                                arguments.get('status'), arguments.get('note'))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "git_create_branch":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = git_create_branch(PROJECTS_DIR / pname, arguments['branch_name'],
+                                   arguments.get('base_branch', 'main'))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "git_commit":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = git_commit(PROJECTS_DIR / pname, arguments['message'],
+                            arguments.get('files'), arguments.get('author', ''))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "git_get_status":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = git_get_status(PROJECTS_DIR / pname)
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "git_merge_branch":
+        pname = arguments['project_name']
+        if pname not in index['projects']:
+            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
+        result = git_merge_branch(PROJECTS_DIR / pname, arguments['source_branch'],
+                                  arguments.get('target_branch', 'main'),
+                                  arguments.get('no_ff', False))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    elif name == "generate_report":
+        result = generate_report(PROJECT_DIR, index, arguments['report_type'],
+                                 arguments.get('project_name'),
+                                 arguments.get('date_range'))
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
+    return [TextContent(type="text", text=json.dumps({'error': f'Unknown tool: {name}'}, ensure_ascii=False))]
+
+
+# --- Dashboard Builders ---
+def _build_company_dashboard(index: dict) -> dict:
+    projects = []
+    for pname, pdata in index.get('projects', {}).items():
+        projects.append({
+            'name': pname,
+            'direction': pdata.get('direction'),
+            'progress': pdata.get('overall_progress', 0),
+            'phase': pdata.get('phase'),
+            'tech_lead': pdata.get('tech_lead'),
+            'status': pdata.get('status', '🟢正常'),
+            'start_date': pdata.get('start_date'),
+            'target_date': pdata.get('target_date'),
+            'blockers': len(pdata.get('blockers', [])),
+        })
+
+    team = index.get('team', {})
+    at_risk = [p['name'] for p in projects if '🔴' in p.get('status', '')]
+    delayed = [p['name'] for p in projects if '延迟' in p.get('status', '')]
+
+    return {
+        'projects': projects,
+        'stats': {
+            'total_projects': len(projects),
+            'active_projects': len([p for p in projects if p.get('progress', 0) < 100]),
+            'at_risk': at_risk,
+            'delayed': delayed,
+            'avg_progress': sum(p.get('progress', 0) for p in projects) / max(len(projects), 1),
+        },
+        'team': team,
+        'generated_at': datetime.now().isoformat(),
+    }
+
+
+def _build_department_dashboard(index: dict, dept_name: str) -> dict:
+    dept_map = {
+        'AI/ML': ['ML', 'Agent'],
+        'IoT': ['IoT'],
+        'App&Web': ['App', 'Web'],
+    }
+    directions = dept_map.get(dept_name, [dept_name])
+
+    dept_projects = []
+    for pname, pdata in index.get('projects', {}).items():
+        if pdata.get('direction') in directions:
+            dept_projects.append({
+                'name': pname,
+                'direction': pdata.get('direction'),
+                'progress': pdata.get('overall_progress', 0),
+                'phase': pdata.get('phase'),
+                'tech_lead': pdata.get('tech_lead'),
+                'status': pdata.get('status', '🟢正常'),
+            })
+
+    return {
+        'department': dept_name,
+        'projects': dept_projects,
+        'total_projects': len(dept_projects),
+        'avg_progress': sum(p.get('progress', 0) for p in dept_projects) / max(len(dept_projects), 1),
+        'generated_at': datetime.now().isoformat(),
+    }
+
+
+def _build_project_dashboard(index: dict, pname: str) -> dict:
+    if pname not in index.get('projects', {}):
+        return {'error': f'Project {pname} not found'}
+
+    pdata = index['projects'][pname]
+    tasks = pdata.get('tasks', [])
+
+    return {
+        'name': pname,
+        'direction': pdata.get('direction'),
+        'tech_lead': pdata.get('tech_lead'),
+        'pm': pdata.get('pm'),
+        'phase': pdata.get('phase'),
+        'phase_progress': pdata.get('phase_progress', 0),
+        'overall_progress': pdata.get('overall_progress', 0),
+        'status': pdata.get('status', '🟢正常'),
+        'start_date': pdata.get('start_date'),
+        'target_date': pdata.get('target_date'),
+        'blockers': pdata.get('blockers', []),
+        'reviews': pdata.get('reviews', {}),
+        'tasks': {
+            'blocked': [t for t in tasks if t.get('status') == 'blocked'],
+            'in_progress': [t for t in tasks if t.get('status') == 'in_progress'],
+            'todo': [t for t in tasks if t.get('status') == 'todo'],
+            'done': [t for t in tasks if t.get('status') == 'done'],
+        },
+        'generated_at': datetime.now().isoformat(),
+    }
+
+
+# --- File Writers (dual compatibility with markdown files) ---
+def _write_status_md(project_dir: Path, pdata: dict):
+    status_file = project_dir / 'status.md'
+    content = f"""# {pdata['name']} — 状态
+
+**最后更新**: {pdata.get('updated_at', datetime.now().strftime('%Y-%m-%d %H:%M'))}
+
+## 基本信息
+- 方向: {pdata.get('direction', 'Unknown')}
+- Tech Lead: {pdata.get('tech_lead', 'Unassigned')}
+- PM: {pdata.get('pm', 'Unassigned')}
+- 开始日期: {pdata.get('start_date', '')}
+- 预计交付: {pdata.get('target_date', '')}
+
+## 当前阶段
+- 阶段: {pdata.get('phase', 'Unknown')}
+- 阶段进度: {pdata.get('phase_progress', 0)}%
+
+## 整体进度
+- 完成度: {pdata.get('overall_progress', 0)}%
+- 状态: {pdata.get('status', '🟢正常')}
+
+## 当前阻塞
+"""
+    for blocker in pdata.get('blockers', []):
+        content += f"- [ ] {blocker}\n"
+
+    content += """
+## 本周完成
+"""
+    for item in pdata.get('this_week_done', []):
+        content += f"- [x] {item}\n"
+
+    content += """
+## 下周计划
+"""
+    for item in pdata.get('next_week_plan', []):
+        content += f"- [ ] {item}\n"
+
+    status_file.write_text(content, encoding='utf-8')
+
+
+def _write_tasks_md(project_dir: Path, tasks: list):
+    tasks_file = project_dir / 'tasks.md'
+    content = f"""# 任务面板
+
+## 🔴 Blocked
+| ID | 任务 | 负责人 | 阻塞原因 | 天数 |
+|----|------|--------|----------|------|
+"""
+    for t in tasks:
+        if t.get('status') == 'blocked':
+            content += f"| {t['id']} | {t['title']} | {t.get('assignee', '—')} | {t.get('blocked_reason', '—')} | — |\n"
+
+    content += """
+## 🟡 In Progress
+| ID | 任务 | 负责人 | 预计完成 | 优先级 |
+|----|------|--------|----------|--------|
+"""
+    for t in tasks:
+        if t.get('status') == 'in_progress':
+            content += f"| {t['id']} | {t['title']} | {t.get('assignee', '—')} | {t.get('estimated_hours', '—')}h | {t.get('priority', '—')} |\n"
+
+    content += """
+## 🔵 Todo
+| ID | 任务 | 负责人 | 预计工时 | 优先级 |
+|----|------|--------|----------|--------|
+"""
+    for t in tasks:
+        if t.get('status') == 'todo':
+            content += f"| {t['id']} | {t['title']} | {t.get('assignee', '—')} | {t.get('estimated_hours', '—')}h | {t.get('priority', '—')} |\n"
+
+    content += """
+## 🟢 Done
+| ID | 任务 | 负责人 | 日期 |
+|----|------|--------|------|
+"""
+    for t in tasks:
+        if t.get('status') == 'done':
+            content += f"| {t['id']} | {t['title']} | {t.get('assignee', '—')} | {t.get('updated_at', t.get('created_at', '—'))[:10]} |\n"
+
+    tasks_file.write_text(content, encoding='utf-8')
+
+
+def _write_review_md(project_dir: Path, gate: str, review_data: dict):
+    reviews_dir = project_dir / REVIEW_DIR_TEMPLATE
+    reviews_dir.mkdir(parents=True, exist_ok=True)
+    review_file = reviews_dir / f'{gate.lower()}.md'
+
+    content = f"""# 评审记录 — {gate}
+
+"""
+    for reviewer_id in ['R1', 'R2', 'R3']:
+        rdata = review_data.get(reviewer_id, {})
+        if not rdata:
+            content += f"## {reviewer_id}: —\n未评审\n\n"
+            continue
+
+        vote_emoji = {'approve': '✅', 'changes_requested': '🔄', 'reject': '❌'}.get(rdata.get('vote', ''), '—')
+        content += f"""## {reviewer_id}
+**投票**: {vote_emoji} {rdata.get('vote', '—')}
+**评分**: {rdata.get('score', '—')}/10
+**日期**: {rdata.get('date', '—')[:10]}
+
+### 发现
+"""
+        for f in rdata.get('findings', []):
+            content += f"- {f}\n"
+
+        content += "\n### 建议\n"
+        for r in rdata.get('recommendations', []):
+            content += f"- {r}\n"
+        content += "\n"
+
+    # Calculate final result
+    votes = [review_data.get(r, {}).get('vote') for r in ['R1', 'R2', 'R3']]
+    approve_count = votes.count('approve')
+    reject_count = votes.count('reject')
+    changes_count = votes.count('changes_requested')
+
+    if approve_count >= 2:
+        result = '✅ 通过'
+    elif reject_count >= 2:
+        result = '❌ 驳回'
+    else:
+        result = '🔄 修改后重审'
+
+    content += f"""
+## 最终裁决
+**结果**: {result}
+**投票统计**: ✅ {approve_count} | 🔄 {changes_count} | ❌ {reject_count}
+"""
+
+    review_file.write_text(content, encoding='utf-8')
+
+
+# --- Main ---
+async def main():
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="ai-team-db",
+                server_version="0.3.0",
+                capabilities=ServerCapabilities(
+                    tools=ToolsCapability(),
+                ),
+            ),
+        )
+
+
+if __name__ == '__main__':
+    import asyncio as _asyncio
+    _asyncio.run(main())

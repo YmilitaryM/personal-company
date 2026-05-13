@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project data (runtime state, not source)
+projects/
+dashboards/
+.claude-plugin/cache/
+.claude/activity.log
+.claude/dashboard-data.json
+
+# Sensitive/local config
+.claude/settings.local.json
+.env
+.env.*

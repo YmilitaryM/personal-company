@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "ai-dev-team",
+  "version": "0.3.0",
+  "description": "AI-powered development team plugin — simulates a complete 33-person software organization with role-based agents, multi-level dashboards, independent 3-person review board with detailed rubrics, 20-tool MCP server, DevOps/SRE, CI/CD templates, sprint management, knowledge base, analytics engine, automated reports, predictive alerts, project templates, and role-based permission matrix.",
+  "author": {
+    "name": "AI Team Builder",
+    "url": "https://github.com/ai-dev-team"
+  },
+  "license": "MIT",
+  "keywords": ["ai-team", "development-team", "project-management", "code-review", "agent-orchestration", "devops", "mcp-server", "analytics", "sprint-management", "knowledge-base", "permissions"],
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json",
+  "experimental": {
+    "monitors": "./monitors/monitors.json"
+  }
+}

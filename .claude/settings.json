@@ -1,0 +1,34 @@
+{
+  "hooks": {
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/post-batch-check.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls *)",
+      "Bash(mkdir *)",
+      "Bash(cat *)",
+      "Bash(echo *)",
+      "Bash(date *)",
+      "Bash(python3 *)",
+      "Bash(pip *)",
+      "Read(./projects/**)",
+      "Read(./docs/**)",
+      "Read(./dashboards/**)",
+      "Read(./templates/**)",
+      "Read(./knowledge-base/**)",
+      "Write(./projects/**)",
+      "Write(./.claude/**)",
+      "Edit(./projects/**)"
+    ]
+  }
+}

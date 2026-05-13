@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "ai-team-db": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/server.py"],
+      "env": {
+        "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
+        "PYTHONPATH": "${CLAUDE_PLUGIN_ROOT}/mcp-server"
+      }
+    }
+  }
+}

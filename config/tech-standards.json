@@ -1,0 +1,57 @@
+{
+  "_description": "Company-wide technology standards. Architect maintains this file.",
+  "_last_updated": "2026-05-13",
+  "_maintained_by": "architect",
+
+  "languages": {
+    "python": {"min_version": "3.11", "rationale": "Server-side, ML, scripting"},
+    "typescript": {"min_version": "5.0", "rationale": "Frontend, type safety"},
+    "go": {"min_version": "1.21", "rationale": "IoT edge, high-performance services"},
+    "rust": {"min_version": "1.70", "rationale": "Systems programming, when needed"}
+  },
+
+  "frontend": {
+    "framework": "React 18+",
+    "meta_framework": "Next.js 14+ (app directory)",
+    "styling": "Tailwind CSS",
+    "state_management": ["React Context (simple)", "Zustand (medium)", "TanStack Query (server state)"],
+    "banned": ["jQuery (new projects)", "AngularJS", "Create React App (use Vite)"]
+  },
+
+  "backend": {
+    "python": "FastAPI 0.100+",
+    "go": "Chi or stdlib net/http",
+    "api_style": "REST (default), gRPC (internal services)",
+    "banned": ["Django (unless full admin needed)", "Flask (use FastAPI)"]
+  },
+
+  "database": {
+    "primary": "PostgreSQL 15+",
+    "cache": "Redis 7+",
+    "search": "Meilisearch or Elasticsearch",
+    "banned": ["MongoDB (unless document-model proven necessary)", "MySQL (use PostgreSQL)"]
+  },
+
+  "infrastructure": {
+    "container": "Docker",
+    "orchestration": "Docker Compose (dev/staging), Kubernetes (production)",
+    "ci_cd": "GitHub Actions",
+    "monitoring": "Prometheus + Grafana"
+  },
+
+  "architecture_patterns": {
+    "web_app": "Next.js + FastAPI backend",
+    "api_service": "FastAPI or Go service",
+    "ml_pipeline": "Python scripts + FastAPI serving",
+    "iot_edge": "Go or Rust on device, MQTT to cloud",
+    "data_pipeline": "Prefect or Airflow"
+  },
+
+  "security_baseline": {
+    "auth": "JWT (access+refresh), OAuth2 for third-party",
+    "https": "Required everywhere",
+    "secrets": "Never in code, use environment variables or vault",
+    "dependency_scanning": "Weekly via Dependabot or Snyk",
+    "code_review": "Required before merge, ≥1 approver"
+  }
+}
