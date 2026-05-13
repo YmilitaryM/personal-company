@@ -36,7 +36,7 @@ claude plugin install --scope user .
 
 | Component | Path | What It Does |
 |-----------|------|--------------|
-| **9 Skills** | `skills/` | Slash commands: `/cto` `/pm` `/tech-lead` `/designer` `/review` `/dashboard` `/project` `/market` `/devops` |
+| **11 Skills** | `skills/` | Slash commands: `/cto` `/pm` `/tech-lead` `/designer` `/review` `/dashboard` `/project` `/pipeline` `/market` `/devops` |
 | **10 Agents** | `agents/` | Subagent definitions: cto, pm, tech-lead, senior-engineer, designer (×1), reviewer-r1/r2/r3, devops, market-manager |
 | **MCP Server** | `mcp-server/` | 23 tools: project CRUD, tasks, reviews, sprints, meetings, knowledge base, reports, dashboard, handoffs |
 | **Hooks** | `hooks/` | Quality gates, analytics alerts, auto-collection, session init |
@@ -50,6 +50,9 @@ claude plugin install --scope user .
 
 | Command | Purpose |
 |---------|---------|
+| `/pipeline start <name>` | Full automation: intake→market research→PRD→architecture→planning→dev→quality→delivery |
+| `/pipeline resume <name>` | Resume interrupted pipeline from last completed phase |
+| `/pipeline status <name>` | Check pipeline progress |
 | `/dashboard company` | All projects at a glance |
 | `/dashboard project <name>` | Single project details + review status |
 | `/project new <name>` | Submit new requirement → auto-initializes with templates |
@@ -61,15 +64,29 @@ claude plugin install --scope user .
 
 ## AI Team Workflow
 
-1. Stakeholder submits need → CTO creates project (templates auto-initialize)
-2. CTO assigns PM → PM fills PRD template
-3. Architect reviews technology choices against `config/tech-standards.json`
-4. TL designs tech spec → Architect pre-DG1 review → task breakdown → assigns engineers
-5. Each engineer: `git_create_branch` → implement → `git_commit` → TL `git_merge_branch`
-6. Stage gates DG1-DG4 → 3 truly independent Reviewer agents (parallel, fork-isolated)
-7. Analytics track velocity, quality, cycle time; alerts flag risks
-8. Daily standups, weekly reports auto-generated
-9. All gates passed → Stakeholder acceptance
+### Automated Pipeline (recommended)
+
+`/pipeline start <project>` runs all 7 phases without manual intervention:
+
+1. Intake → CTO creates project, assigns PM
+2. Market Research → Market Manager analyzes competitors, produces competitive matrix
+3. Requirements → PM writes PRD informed by market research
+4. Architecture → Architect reviews tech choices against `config/tech-standards.json`
+5. Planning → Tech Lead designs spec, breaks down tasks
+6. Development → Engineers implement tasks (git branch → code → commit → merge)
+7. Quality → DG1→DG2→DG3→DG4 gate reviews (3 independent reviewers per gate)
+8. Delivery → Final report, stakeholder handoff
+
+Pipeline state is saved to `projects/<name>/.pipeline-state.json` — resume with `/pipeline resume <name>`.
+
+### Web Dashboard
+
+```bash
+python3 scripts/web_dashboard.py --port 8080
+# Open http://localhost:8080 — real-time project monitoring, auto-refresh 30s
+```
+
+### Manual Workflow
 
 ## Organization (33 people, 10 Agent types)
 
@@ -129,6 +146,7 @@ Full rubrics: `docs/review-rubric.md`
 |--------|---------|
 | `scripts/init_project.py` | Auto-initialize new project with all templates |
 | `scripts/collect-dashboard.py` | Aggregate dashboard data (prefers .index.json, falls back to parsing .md files). Also generates dashboards/*.md |
+| `scripts/web_dashboard.py` | Web-based real-time dashboard (stdlib http.server, port 8080, reads .index.json and .pipeline-state.json) |
 | `scripts/analytics.py` | Velocity, quality, cycle time + predictive alerts (reads .index.json directly) |
 | `scripts/reports.py` | Daily standup, weekly report, sprint retro |
 | `scripts/sync-models.py` | Sync config/models.json → agents/*.md frontmatter |
@@ -137,13 +155,18 @@ Full rubrics: `docs/review-rubric.md`
 
 ```
 projects/<name>/
-├── README.md          # Auto-generated overview
-├── prd.md             # PM fills from template
-├── tech-spec.md       # TL fills from template
-├── test-plan.md       # Test plan from template
-├── tasks.md           # Task board (MCP-synced)
-├── status.md          # Status (MCP-synced)
-├── reviews/           # DG1-DG4 review records
-├── .sprints/          # Sprint data (JSON)
-└── .meetings/         # Meeting notes (JSON)
+├── README.md              # Auto-generated overview
+├── intake-brief.md        # CTO intake brief (pipeline Phase 0 output)
+├── market-research.md     # Competitive analysis (pipeline Phase 1 output)
+├── prd.md                 # PM fills from template (informed by market research)
+├── architecture-review.md # Architect compliance report
+├── tech-spec.md           # TL technical spec + task breakdown
+├── test-plan.md           # Test plan from template
+├── tasks.md               # Task board (MCP-synced)
+├── status.md              # Status (MCP-synced)
+├── delivery-report.md     # Pipeline delivery report
+├── .pipeline-state.json   # Pipeline progress (for resume)
+├── reviews/               # DG1-DG4 review records
+├── .sprints/              # Sprint data (JSON)
+└── .meetings/             # Meeting notes (JSON)
 ```

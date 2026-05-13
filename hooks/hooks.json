@@ -46,11 +46,13 @@
   },
   {
     "event": "SubagentStop",
-    "description": "Track subagent completion and check analytics",
+    "description": "Track subagent completion — auto-collect dashboard data and pipeline progress",
     "hooks": [
       {
         "type": "command",
-        "command": "echo '{\"decision\":\"continue\"}'"
+        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/collect-dashboard.py 2>/dev/null || true",
+        "async": true,
+        "timeout": 30
       }
     ]
   },
