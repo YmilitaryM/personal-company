@@ -30,6 +30,7 @@ ROLE_TO_AGENT = {
     'senior-engineer': 'senior-engineer.md',
     'devops': 'devops.md',
     'market-manager': 'market-manager.md',
+    'domain-engineer': 'domain-engineer.md',
 }
 
 

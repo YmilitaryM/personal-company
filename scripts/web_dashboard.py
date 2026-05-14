@@ -632,28 +632,38 @@ const ROLE_DESCRIPTIONS = {
   'senior-engineer': 'Senior Engineer — 开发',
   'devops': 'DevOps — CI/CD',
   'market-manager': 'Market — 市场调研',
+  'domain-engineer': 'Domain Eng — ML/IoT/Agent',
 };
 
 async function loadConfig() {
-  const resp = await fetch('/api/models');
-  const data = await resp.json();
-  const models = data.models || {};
-  const available = data.available || [];
   const form = document.getElementById('config-form');
+  try {
+    const resp = await fetch('/api/models');
+    if (!resp.ok) throw new Error('Server returned ' + resp.status);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    const models = data.models || {};
+    const available = data.available || [];
 
-  let html = '';
-  for (const [role, desc] of Object.entries(ROLE_DESCRIPTIONS)) {
-    const model = models[role] || 'inherit';
-    const datalistId = 'dl-' + role;
-    html += '<div class="config-row">' +
-      '<div class="role-info"><div class="role-name">' + escapeHtml(role) + '</div><div class="role-desc">' + escapeHtml(desc) + '</div></div>' +
-      '<div class="model-input">' +
-      '<input list="' + datalistId + '" id="role-' + escapeHtml(role) + '" value="' + escapeHtml(model) + '" onchange="markChanged(\'' + escapeHtml(role) + '\')">' +
-      '<datalist id="' + datalistId + '">' + available.map(m => '<option value="' + escapeHtml(m) + '">').join('') + '</datalist>' +
-      '<span class="current-badge">' + escapeHtml(model) + '</span>' +
-      '</div></div>';
+    let html = '';
+    for (const [role, desc] of Object.entries(ROLE_DESCRIPTIONS)) {
+      const model = models[role] || 'inherit';
+      const datalistId = 'dl-' + role;
+      html += '<div class="config-row">' +
+        '<div class="role-info"><div class="role-name">' + escapeHtml(role) + '</div><div class="role-desc">' + escapeHtml(desc) + '</div></div>' +
+        '<div class="model-input">' +
+        '<input list="' + datalistId + '" id="role-' + escapeHtml(role) + '" value="' + escapeHtml(model) + '" onchange="markChanged(\'' + escapeHtml(role) + '\')">' +
+        '<datalist id="' + datalistId + '">' + available.map(m => '<option value="' + escapeHtml(m) + '">').join('') + '</datalist>' +
+        '<span class="current-badge">' + escapeHtml(model) + '</span>' +
+        '</div></div>';
+    }
+    form.innerHTML = html;
+  } catch (e) {
+    form.innerHTML = '<div style="padding:20px;color:var(--red);text-align:center">' +
+      'Failed to load config: ' + escapeHtml(e.message) + '<br>' +
+      '<span style="font-size:12px;color:var(--text-muted)">Is web_dashboard.py running? Check that config/models.json exists.</span>' +
+      '</div>';
   }
-  form.innerHTML = html;
 }
 
 function markChanged(role) {

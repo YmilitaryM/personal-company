@@ -13,7 +13,7 @@
 ### 前提条件
 
 - **Claude Code** v2.0+（`claude --version` 验证）
-- **Python 3.14**（MCP Server 运行需要）- [下载](https://www.python.org/downloads/)
+- **Python 3.12+**（MCP Server 运行需要）- [下载](https://www.python.org/downloads/)
 - **Git**（版本控制工具需要）
 
 ```bash
@@ -294,7 +294,7 @@ DG4 (待交付)       → ≥8.0/10  部署、文档、验收标准
 ## 插件能力一览
 
 - **11 个 Slash 命令** — 按角色调用 + 全流程自动流水线
-- **10 个 Agent 角色** — 含 3 个独立 Reviewer（context: fork 并行）
+- **11 个 Agent 角色** — 含 3 个独立 Reviewer（context: fork 并行）
 - **27 个 MCP 工具** — 项目/任务/评审/Sprint/会议/知识库/报表/交接/Git
 - **7 阶段自动流水线** — 一键 `/pipeline start` 从立项到交付，支持断点恢复
 - **Web Dashboard** — 浏览器实时监控，公司/部门/项目三级视图，30s 自动刷新
@@ -311,7 +311,7 @@ DG4 (待交付)       → ≥8.0/10  部署、文档、验收标准
 ```
 ├── .claude-plugin/    # 插件清单（plugin.json）
 ├── skills/            # 11 个 Slash Command 定义（含 pipeline）
-├── agents/            # 10 个 Agent 角色定义
+├── agents/            # 11 个 Agent 角色定义
 ├── mcp-server/        # MCP Server — 27 个工具
 │   ├── server.py      # 核心 12 工具 + 入口
 │   ├── extended.py    # 扩展 15 工具（Sprint/会议/Git/交接）
@@ -328,7 +328,7 @@ DG4 (待交付)       → ≥8.0/10  部署、文档、验收标准
 ├── design-system/     # 设计 Token
 ├── hooks/             # 质量门禁、自动采集
 ├── monitors/          # Dashboard 刷新、截止日期跟踪
-├── tests/             # 单元测试（25 tests）
+├── tests/             # 单元测试（26 tests）
 ├── .mcp.json          # MCP Server 注册
 └── .gitignore
 ```

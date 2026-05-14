@@ -44,6 +44,16 @@ if ! command -v "$PYTHON" &>/dev/null; then
   PYTHON="python3"
 fi
 
+# ── Check git repo ──
+PROJECTS_DIR="$PROJECT_DIR/projects"
+if [ ! -d "$PROJECTS_DIR" ]; then
+  mkdir -p "$PROJECTS_DIR"
+fi
+if ! git -C "$PROJECT_DIR" rev-parse --git-dir &>/dev/null; then
+  echo "  ⚠ Not a git repository. Initializing..."
+  git -C "$PROJECT_DIR" init
+fi
+
 # ── Cleanup on exit ──
 cleanup() {
   echo ""

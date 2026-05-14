@@ -36,8 +36,8 @@ claude plugin install --scope user .
 
 | Component | Path | What It Does |
 |-----------|------|--------------|
-| **11 Skills** | `skills/` | Slash commands: `/cto` `/pm` `/tech-lead` `/designer` `/review` `/dashboard` `/project` `/pipeline` `/market` `/devops` |
-| **10 Agents** | `agents/` | Subagent definitions: cto, pm, tech-lead, senior-engineer, designer (×1), reviewer-r1/r2/r3, devops, market-manager |
+| **11 Skills** | `skills/` | Slash commands: `/cto` `/pm` `/tech-lead` `/architect` `/designer` `/review` `/dashboard` `/project` `/pipeline` `/market` `/devops` |
+| **11 Agents** | `agents/` | Subagent definitions: cto, pm, tech-lead, senior-engineer, domain-engineer, designer (×1), reviewer-r1/r2/r3, devops, market-manager |
 | **MCP Server** | `mcp-server/` | 27 tools: project CRUD, tasks, reviews, sprints, meetings, knowledge base, reports, dashboard, handoffs, git |
 | **Hooks** | `hooks/` | Quality gates, analytics alerts, auto-collection, session init |
 | **Monitors** | `monitors/` | Dashboard refresh, deadline tracking |
@@ -90,7 +90,7 @@ bash scripts/start.sh
 
 ### Manual Workflow
 
-## Organization (33 people, 10 Agent types)
+## Organization (33 people, 11 Agent types)
 
 - **Management (Agents)**: CTO, PM×3, Market Manager (5)
 - **Execution (Agents)**: Tech Lead×3, Senior Engineer×12, Domain Engineer×6 (ML/IoT/Agent), Designer×4 (25)
