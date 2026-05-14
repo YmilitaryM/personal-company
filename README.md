@@ -328,7 +328,7 @@ DG4 (待交付)       → ≥8.0/10  部署、文档、验收标准
 ├── design-system/     # 设计 Token
 ├── hooks/             # 质量门禁、自动采集
 ├── monitors/          # Dashboard 刷新、截止日期跟踪
-├── tests/             # 单元测试（26 tests）
+├── tests/             # 单元测试（25 tests）
 ├── .mcp.json          # MCP Server 注册
 └── .gitignore
 ```
