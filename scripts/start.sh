@@ -17,6 +17,27 @@ fi
 GW_PORT="${GATEWAY_PORT:-4000}"
 WEB_PORT="${WEB_PORT:-8080}"
 
+# ── Check port conflicts ──
+check_port() {
+  local port=$1
+  local name=$2
+  if lsof -ti:"$port" &>/dev/null; then
+    echo "  ⚠ Port $port is in use ($name)"
+    echo "    Set ${3}=<port> to use a different port"
+    return 1
+  fi
+  return 0
+}
+
+PORT_OK=1
+check_port "$GW_PORT" "Model Gateway" "GATEWAY_PORT" || PORT_OK=0
+check_port "$WEB_PORT" "Web Dashboard" "WEB_PORT" || PORT_OK=0
+if [ "$PORT_OK" = "0" ]; then
+  echo ""
+  echo "Tip: Example: WEB_PORT=9090 GATEWAY_PORT=4001 bash scripts/start.sh"
+  echo ""
+fi
+
 # ── Check deps ──
 PYTHON="${PYTHON_CMD:-python3.14}"
 if ! command -v "$PYTHON" &>/dev/null; then

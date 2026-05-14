@@ -40,7 +40,6 @@ def sync(dry_run: bool = False):
 
     config = json.loads(CONFIG_FILE.read_text())
     roles = config.get('roles', {})
-    available = config.get('_models_available', ['opus', 'sonnet', 'haiku', 'inherit'])
     changes = []
 
     for role, model in roles.items():

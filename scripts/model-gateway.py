@@ -742,6 +742,12 @@ def main():
     except KeyboardInterrupt:
         print('\nShutting down.')
         server.shutdown()
+    except OSError as e:
+        if 'Address already in use' in str(e):
+            print(f'Error: Port {args.port} is already in use.')
+            print(f'  Try: GATEWAY_PORT={args.port + 1} bash scripts/start.sh')
+            sys.exit(1)
+        raise
 
 
 if __name__ == '__main__':
