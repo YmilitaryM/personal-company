@@ -625,6 +625,13 @@ button.danger { background: var(--red); }
 </main>
 
 <script>
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(String(str)));
+  return div.innerHTML;
+}
+
 const ROLE_DESCRIPTIONS = {
   'cto': 'CTO — 立项审批、架构审批、僵局仲裁、交付签署',
   'architect': 'Architect — 架构治理',
