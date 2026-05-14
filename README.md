@@ -63,7 +63,7 @@ claude plugin install --scope user ~/ai-dev-team
 /tech-lead     → 技术方案设计
 /architect     → 架构治理
 /designer      → UI/UX 设计
-/review        → 3人独立评审
+/review        → 3轮辩论式评审
 /dashboard     → 多层仪表盘
 /project       → 项目管理
 /pipeline      → 全流程自动化
@@ -80,25 +80,25 @@ claude plugin install --scope user ~/ai-dev-team
 
 | 命令 | 用途 | 示例 |
 |------|------|------|
-| `/pipeline start <name>` | **一键全流程自动化**：市场调研→PRD→架构→开发→评审→交付 | `/pipeline start my-app` |
+| `/pipeline start <name>` | **一键全流程自动化**：立项→调研→PRD→架构→CTO审批→方案→开发→评审→交付 | `/pipeline start my-app` |
 | `/dashboard company` | 全公司项目总览：进度、状态、风险 | `/dashboard company` |
 | `/dashboard project <name>` | 单项目详情：任务、评审、阻塞 | `/dashboard project my-app` |
 | `/project new <name>` | 提交新需求，自动创建全套模板 | `/project new smart-factory` |
-| `/review <project> <gate>` | 触发 3 人独立评审（DG1~DG4） | `/review my-app DG1` |
-| `/cto <directive>` | 直接向 CTO 下达技术决策 | `/cto 评估用Rust重写数据管道` |
+| `/review <project> <gate>` | 触发 3人辩论式评审（DG1~DG4），含CTO僵局仲裁 | `/review my-app DG1` |
+| `/cto <directive>` | CTO：立项审批、架构审批、资源调配、僵局仲裁、交付签署 | `/cto 评估用Rust重写数据管道` |
 
-> **使用优先级**：新项目直接用 `/pipeline start` 一键跑完全流程；已有项目调用单独的角色命令。管道中断后 `/pipeline resume` 从断点继续。 |
+> **使用优先级**：新项目直接用 `/pipeline start` 一键跑完9阶段全流程；已有项目调用单独的角色命令。管道中断后 `/pipeline resume` 从断点继续。所有管理决策自动记录在 `.pipeline-state.json` 的 `decisions` 数组中，形成完整决策追溯链。 |
 
 ### 角色命令（按需调用）
 
 | 命令 | 谁 | 做什么 |
 |------|----|--------|
-| `/pipeline start <name>` | 流水线编排器 | 一键从立项跑完 7 阶段到交付 |
+| `/pipeline start <name>` | 流水线编排器 | 一键从立项跑完 9 阶段到交付 |
 | `/pipeline resume <name>` | 流水线编排器 | 从断点恢复中断的流水线 |
 | `/pipeline status <name>` | 流水线编排器 | 查看流水线当前进度 |
 | `/pm <direction>` | 产品经理 | 需求分析、PRD 撰写 |
 | `/architect review` | 架构师 | 技术标准治理、架构评审 |
-| `/tech-lead <project>` | Tech Lead | 技术方案设计、任务分解 |
+| `/tech-lead <project>` | Tech Lead | 组建团队、技术方案、任务分配、代码审查 |
 | `/designer ui <project>` | 设计师 | UI/UX 设计（内置 Figma MCP 直接画图） |
 | `/devops ci <project>` | DevOps | CI/CD 流水线生成 |
 | `/tdd <task>` | TDD 工程师 | Red-Green-Refactor 测试驱动开发（基于现有工程师） |
@@ -209,22 +209,25 @@ python3.14 scripts/sync-models.py --dry-run  # 预览
 
 ### 一键自动化流水线
 
-`/pipeline start <project>` 运行完整 7 阶段流程，无需人工介入：
+`/pipeline start <project>` 运行完整 9 阶段流程，无需人工介入：
 
 ```
-Phase 0: 立项      — CTO 创建项目、分配 PM、确定产品方向
-Phase 1: 市场调研   — Market Manager 市场分析、竞品矩阵、差异化策略
-Phase 2: 需求      — PM 基于市场调研撰写 PRD
-Phase 3: 架构      — Architect 对照技术标准评审
-Phase 4: 方案      — Tech Lead 技术方案设计、任务分解
-Phase 5: 开发      — Senior Engineer 逐任务实现（Git 分支→提交→合并）
-Phase 6: 质量      — DG1→DG2→DG3→DG4 门禁评审（每阶段 3 人独立投票）
-Phase 7: 交付      — 生成交付报告，干系人验收
+Phase 0: 立项       — CTO 创建项目、分配 PM、记录立项决策
+Phase 1: 市场调研    — Market Manager 市场分析、竞品矩阵、差异化策略
+Phase 2: 需求       — PM 基于市场调研撰写 PRD
+Phase 3: 架构       — Architect 对照 tech-standards.json 评审
+Phase 3.5: CTO审批  — CTO 审批架构方案（批准/有条件批准/驳回），记录决策
+Phase 4: 方案       — Tech Lead 组建团队、技术方案设计、任务分解与分配
+Phase 5: 开发       — TL 驱动开发循环：分配任务→工程师实现→后台代码审查→合并
+Phase 6: 质量       — DG1→DG2→DG3→DG4 门禁评审（3轮辩论+CTO僵局仲裁）
+Phase 7: 交付       — CTO 最终签署、交付报告、干系人验收
 ```
 
 - `/pipeline resume <project>` — 中断后从断点恢复
 - `/pipeline status <project>` — 查看流水线进度
 - `/pipeline cancel <project>` — 取消流水线
+
+流水线状态保存在 `projects/<name>/.pipeline-state.json`，包含完整的 **决策追溯链**（每个管理决策记录上下文、备选方案、理由、接受的风险、可逆性、结果验证计划）。
 
 ### 一键启动所有服务
 
@@ -255,20 +258,39 @@ ANTHROPIC_BASE_URL=http://localhost:4000 claude --plugin-dir ~/ai-dev-team
 - **项目视图** — 点击进入详情：任务面板、评审门禁、流水线阶段
 - **自动刷新** — 每 30 秒拉取最新数据，无需手动刷新
 
+### CTO 与 Tech Lead 的管理职责
+
+**CTO**（公司级资源调配者和最终技术仲裁者）：
+- **立项审批**：评估战略契合度、资源可用性、风险，记录审批决策
+- **架构审批**（Phase 3.5）：批准/有条件批准/驳回架构方案
+- **僵局仲裁**：当3位评审员出现 1:1:1 僵局时，按Gate类型加权做出绑定裁决
+- **交付签署**：验证所有门禁通过、所有任务完成、所有风险检查后签署交付
+- **不直接分配人员** — 这是 TL 的职责
+
+**Tech Lead**（管理者-工程师混合体）：
+- **组建团队**：查询资源池，按技能匹配选择工程师，记录团队组建决策
+- **后台代码审查**：工程师提交代码后异步审查（检查AC覆盖率、测试≥80%、技术标准合规），不阻塞下一位工程师
+- **进度监控**：Sprint燃尽、速率计算、瓶颈检测
+- **内部预审**：DG2前自我评估（信心点、不确定点、已知问题）
+- **任务状态流转**：todo → assigned → in_progress → submitted → reviewed_pass/reviewed_fail
+
+详细决策记录格式见 `skills/pipeline/SKILL.md` 中的 Decision Record Schema。
+
 ### 手动工作流
 
 如果需要精细控制每个阶段：
 
-1. 干系人提交需求 → CTO 创建项目（模板自动初始化）
+1. 干系人提交需求 → CTO 创建项目、记录立项决策
 2. Market Manager 市场调研竞品分析 → PM 基于调研填写 PRD
-3. 架构师审核技术选型 → TL 设计技术方案 → 任务分解 → 分配工程师
-4. 工程师：`git_create_branch` → 实现 → `git_commit` → TL `git_merge_branch`
-5. DG1-DG4 阶段门禁 → 3 个独立 Reviewer 并行评审
-6. 分析自动追踪进度、质量、周期时间，异常预警
-7. 日报、周报自动生成
-8. 全部门禁通过 → 干系人验收
+3. 架构师审核技术选型 → CTO 审批架构方案（批准/有条件批准/驳回）
+4. TL 组建团队 → 技术方案设计 → 任务分解 → 分配工程师
+5. 工程师：`git_create_branch` → 实现 → `git_commit` → TL 后台代码审查 → `git_merge_branch`
+6. DG1-DG4 阶段门禁 → 3人并行评审 → 交叉辩论 → 合议裁决（僵局时CTO仲裁）
+7. 分析自动追踪进度、质量、周期时间，异常预警
+8. 日报、周报自动生成
+9. 全部门禁通过 → CTO 签署交付 → 干系人验收
 
-### 4 阶段门禁评审
+### 4 阶段门禁评审（3轮辩论式）
 
 ```
 DG1 (方案设计完成)  → ≥6.0/10  架构、UX、任务分解
@@ -277,16 +299,22 @@ DG3 (质量保证完成)  → ≥7.5/10  性能、安全、Bug率
 DG4 (待交付)       → ≥8.0/10  部署、文档、验收标准
 ```
 
-每个阶段 3 个独立 Reviewer 并行投票（R1 架构/R2 产品/R3 工程），≥2/3 通过。
+**3轮评审流程**：
+
+1. **Round 1 — 独立评审**：R1（架构）/ R2（产品）/ R3（工程）并行隔离评审所有方面（"Lens, Not Boundary"）
+2. **Round 2 — 交叉辩论**：审查者互相挑战发现、识别冲突、让步或辩护、修订分数
+3. **Round 3 — 合议裁决**：综合共识与分歧，≥2 approve → PASS，1:1:1僵局 → **CTO仲裁**（根据Gate类型加权偏向：DG1→R1, DG2→R3, DG3→R3, DG4→R2）
+
+完整评分细则见 `docs/review-rubric.md`，评审记录模板见 `docs/review-template.md`。
 
 ## 团队规模（33人）
 
 | 角色 | 人数 | 模型 | 职责 |
 |------|------|------|------|
-| CTO | 1 | opus | 技术战略、资源调配 |
+| CTO | 1 | opus | 立项审批、资源调配、架构审批、僵局仲裁、交付签署 |
 | Architect | 1 | opus | 技术标准、架构治理 |
 | PM | 3 | opus | 产品需求（AI/ML、IoT、App&Web） |
-| Tech Lead | 3 | opus | 技术方案、任务分解 |
+| Tech Lead | 3 | opus | 组建团队、任务分配、后台代码审查、进度监控、预审 |
 | Senior Engineer | 12 | inherit | 主力开发 |
 | Domain Engineer | 6 | inherit | ML、IoT、Agent 专家 |
 | Designer | 4 | opus | UI/UX 设计（Figma MCP） |
@@ -299,9 +327,9 @@ DG4 (待交付)       → ≥8.0/10  部署、文档、验收标准
 - **12 个 Slash 命令** — 按角色调用 + 全流程自动流水线 + TDD
 - **11 个 Agent 角色** — 含 3 个独立 Reviewer（context: fork 并行）
 - **27 个 MCP 工具** — 项目/任务/评审/Sprint/会议/知识库/报表/交接/Git
-- **7 阶段自动流水线** — 一键 `/pipeline start` 从立项到交付，支持断点恢复
+- **9 阶段自动流水线** — 一键 `/pipeline start` 从立项到交付，支持断点恢复、决策追溯链
 - **Web Dashboard** — 浏览器实时监控，公司/部门/项目三级视图，30s 自动刷新
-- **4 阶段门禁评审** — DG1-DG4，每个阶段 3 人独立投票
+- **4 阶段门禁评审** — DG1-DG4，3轮辩论式（独立评审→交叉辩论→合议裁决），僵局时CTO仲裁
 - **市场调研集成** — Market Manager 竞品分析、市场定位，PRD 数据驱动
 - **Figma MCP 集成** — Designer 直接操作 Figma 画 UI
 - **Git 版本控制** — 分支/提交/合并，MCP 工具封装
