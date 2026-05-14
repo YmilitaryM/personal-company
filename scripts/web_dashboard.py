@@ -164,7 +164,11 @@ def _extract_reviews(pipe: dict) -> dict:
 
 
 def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_project_names: set):
-    """Scan a single projects_dir for directories with .pipeline-state.json not in index."""
+    """Scan a single projects_dir for project directories not in the index.
+
+    Discovers projects via .pipeline-state.json (preferred) or bare directories
+    (no state yet — shows as 'new' with minimal info).
+    """
     if not projects_dir.exists():
         return
     for item in sorted(projects_dir.iterdir()):
@@ -190,6 +194,20 @@ def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_proje
                 'reviews': _extract_reviews(pipe),
                 'start_date': pipe.get('started_at', ''),
                 'target_date': pipe.get('target_date', ''),
+            }
+        else:
+            # Bare project directory — no pipeline state yet, still discoverable
+            extra_projects[item.name] = {
+                'direction': 'Unknown',
+                'tech_lead': 'Unassigned',
+                'phase': 'new',
+                'overall_progress': 0,
+                'status': 'new',
+                'blockers': [],
+                'tasks': [],
+                'reviews': {},
+                'start_date': '',
+                'target_date': '',
             }
 
 
@@ -669,7 +687,7 @@ function renderProject() {
     statCard('Progress', (p.overall_progress||0) + '%', progressColor) +
     statCard('Tasks', (p.tasks.done||0) + '/' + taskTotal, 'accent') +
     statCard('Blockers', (p.blockers||[]).length, (p.blockers||[]).length > 0 ? 'red' : 'green') +
-    statCard('Status', p.status || 'ok', p.status === 'ok' || p.status === 'normal' ? 'green' : 'yellow') +
+    statCard('Status', p.status || 'ok', p.status === 'ok' || p.status === 'normal' ? 'green' : p.status === 'new' ? 'accent' : 'yellow') +
     '</div>';
 
   html += '<div class="progress-bar"><div class="progress-fill ' + progressColor + '" style="width:' + (p.overall_progress||0) + '%"></div></div>';
