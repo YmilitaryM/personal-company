@@ -67,16 +67,17 @@ claude plugin install --scope user .
 
 ### Automated Pipeline (recommended)
 
-`/pipeline start <project>` runs all 7 phases without manual intervention:
+`/pipeline start <project>` runs all 9 phases without manual intervention:
 
-1. Intake → CTO creates project, assigns PM
+1. Intake → CTO creates project, assigns PM, records charter approval
 2. Market Research → Market Manager analyzes competitors, produces competitive matrix
 3. Requirements → PM writes PRD informed by market research
 4. Architecture → Architect reviews tech choices against `config/tech-standards.json`
-5. Planning → Tech Lead designs spec, breaks down tasks
-6. Development → Engineers implement tasks (git branch → code → commit → merge)
-7. Quality → DG1→DG2→DG3→DG4 gate reviews (3 independent reviewers per gate)
-8. Delivery → Final report, stakeholder handoff
+5. CTO Approval → CTO approves/rejects/conditions the architecture (REAL authority, not rubber-stamp)
+6. Planning → Tech Lead forms team, designs spec, breaks down tasks, assigns engineers
+7. Development → Tech Lead manages engineers with background code review (non-blocking, parallel)
+8. Quality → DG1→DG2→DG3→DG4 gate reviews with 3-round debate + CTO arbitration for deadlocks
+9. Delivery → CTO sign-off, final report, stakeholder handoff
 
 Pipeline state is saved to `projects/<name>/.pipeline-state.json` — resume with `/pipeline resume <name>`.
 

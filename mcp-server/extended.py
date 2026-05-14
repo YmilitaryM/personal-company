@@ -396,7 +396,7 @@ def generate_report(project_dir: Path, projects_index: dict,
             p = projects[project_name]
             # Count tasks by status
             tasks = p.get('tasks', [])
-            task_counts = {'blocked': 0, 'in_progress': 0, 'todo': 0, 'done': 0}
+            task_counts = {'blocked': 0, 'in_progress': 0, 'assigned': 0, 'submitted': 0, 'in_review': 0, 'reviewed_pass': 0, 'reviewed_fail': 0, 'todo': 0, 'done': 0}
             for t in tasks:
                 s = t.get('status', 'todo')
                 task_counts[s] = task_counts.get(s, 0) + 1

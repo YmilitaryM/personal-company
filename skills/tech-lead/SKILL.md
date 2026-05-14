@@ -4,7 +4,7 @@ description: Invoke the Tech Lead role — technical scheme design, task decompo
 when_to_use: When you need technical design for a project, task breakdown, or team management decisions. Usually invoked after PM has completed the PRD.
 argument-hint: "[project-name]"
 user-invocable: true
-allowed-tools: Read, Write, Edit, Bash, Agent, TaskCreate, TaskUpdate, WebFetch, WebSearch, mcp__ai-team-db__get_project, mcp__ai-team-db__update_project_status, mcp__ai-team-db__create_task, mcp__ai-team-db__update_task, mcp__ai-team-db__list_tasks, mcp__ai-team-db__create_sprint, mcp__ai-team-db__update_sprint, mcp__ai-team-db__list_sprints, mcp__ai-team-db__log_meeting, mcp__ai-team-db__create_handoff, mcp__ai-team-db__list_handoffs, mcp__ai-team-db__get_review, mcp__ai-team-db__generate_report
+allowed-tools: Read, Write, Edit, Bash, Agent, TaskCreate, TaskUpdate, WebFetch, WebSearch, mcp__ai-team-db__get_project, mcp__ai-team-db__update_project_status, mcp__ai-team-db__create_task, mcp__ai-team-db__update_task, mcp__ai-team-db__list_tasks, mcp__ai-team-db__create_sprint, mcp__ai-team-db__update_sprint, mcp__ai-team-db__list_sprints, mcp__ai-team-db__log_meeting, mcp__ai-team-db__create_handoff, mcp__ai-team-db__list_handoffs, mcp__ai-team-db__get_review, mcp__ai-team-db__generate_report, mcp__ai-team-db__list_team, mcp__ai-team-db__add_knowledge, mcp__ai-team-db__search_knowledge, mcp__ai-team-db__get_dashboard, mcp__ai-team-db__update_team_member
 model: opus
 effort: high
 ---

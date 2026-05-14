@@ -53,7 +53,7 @@ def load_dashboard_data(projects_dir: Path) -> dict:
     projects = []
     for pname, pdata in index.get('projects', {}).items():
         tasks = pdata.get('tasks', [])
-        tasks_by_status = {'blocked': 0, 'in_progress': 0, 'todo': 0, 'done': 0}
+        tasks_by_status = {'blocked': 0, 'in_progress': 0, 'assigned': 0, 'submitted': 0, 'in_review': 0, 'reviewed_pass': 0, 'reviewed_fail': 0, 'todo': 0, 'done': 0}
         for t in tasks:
             s = t.get('status', 'todo')
             tasks_by_status[s] = tasks_by_status.get(s, 0) + 1
@@ -361,7 +361,7 @@ function renderCompany() {
       const ps = pipelineData[name];
       const phase = ps ? Object.entries(ps.phases || {}).filter(([k,v]) => v.status==='done').length : 0;
       html += '<span style="background:#1c2838;padding:4px 12px;border-radius:12px;font-size:12px;color:var(--accent)">' +
-        escapeHtml(name) + ' · Phase ' + phase + '/7</span>';
+        escapeHtml(name) + ' · Phase ' + phase + '/8</span>';
     });
     html += '</div>';
   }
@@ -440,8 +440,11 @@ function renderProject() {
 
   // Tasks
   html += '<div class="detail-card"><h4>Tasks</h4>';
-  html += taskRow('Done', p.tasks.done||0, 'var(--green)');
+  html += taskRow('Done', (p.tasks.done||0) + (p.tasks.reviewed_pass||0), 'var(--green)');
   html += taskRow('In Progress', p.tasks.in_progress||0, 'var(--yellow)');
+  html += taskRow('Submitted', p.tasks.submitted||0, 'var(--accent)');
+  html += taskRow('In Review', p.tasks.in_review||0, 'var(--purple)');
+  html += taskRow('Assigned', p.tasks.assigned||0, 'var(--text-muted)');
   html += taskRow('Todo', p.tasks.todo||0, 'var(--text-muted)');
   html += taskRow('Blocked', p.tasks.blocked||0, 'var(--red)');
   html += '<div class="progress-bar" style="margin-top:10px;"><div class="progress-fill green" style="width:' + taskPct + '%"></div></div>';
@@ -458,8 +461,8 @@ function renderProject() {
   if (pipe) {
     html += '<div class="detail-card"><h4>Pipeline Progress</h4><ul class="pipeline-phase-list">';
     const phaseNames = {intake:'Intake', market_research:'Market Research', requirements:'Requirements',
-      architecture:'Architecture', planning:'Planning', development:'Development',
-      quality:'Quality Gates', delivery:'Delivery'};
+      architecture:'Architecture', cto_architecture_approval:'CTO Approval', planning:'Planning',
+      development:'Development', quality:'Quality Gates', delivery:'Delivery'};
     let phaseNum = 0;
     for (const [key, phase] of Object.entries(pipe.phases || {})) {
       const icon = phase.status === 'done' ? '✅' : phase.status === 'in_progress' ? '🔄' : phase.status === 'failed' ? '❌' : '⏳';

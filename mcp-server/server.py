@@ -190,7 +190,7 @@ async def list_tools() -> list[Tool]:
                     "assignee": {"type": "string"},
                     "estimated_hours": {"type": "number"},
                     "priority": {"type": "string", "enum": ["P0", "P1", "P2", "P3"]},
-                    "status": {"type": "string", "enum": ["todo", "in_progress", "blocked", "done"], "default": "todo"},
+                    "status": {"type": "string", "enum": ["todo", "assigned", "in_progress", "submitted", "in_review", "reviewed_pass", "reviewed_fail", "blocked", "done"], "default": "todo"},
                     "blocked_reason": {"type": "string"},
                     "files": {"type": "array", "items": {"type": "string"}, "description": "Source files this task claims. Conflicts with files in other active tasks are rejected."},
                 },
@@ -205,7 +205,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "project_name": {"type": "string"},
                     "task_id": {"type": "string"},
-                    "status": {"type": "string", "enum": ["todo", "in_progress", "blocked", "done"]},
+                    "status": {"type": "string", "enum": ["todo", "assigned", "in_progress", "submitted", "in_review", "reviewed_pass", "reviewed_fail", "blocked", "done"]},
                     "assignee": {"type": "string"},
                     "blocked_reason": {"type": "string"},
                 },
@@ -219,7 +219,7 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "project_name": {"type": "string"},
-                    "status_filter": {"type": "string", "enum": ["todo", "in_progress", "blocked", "done"]}
+                    "status_filter": {"type": "string", "enum": ["todo", "assigned", "in_progress", "submitted", "in_review", "reviewed_pass", "reviewed_fail", "blocked", "done"]}
                 },
                 "required": ["project_name"]
             }
@@ -740,6 +740,11 @@ def _build_project_dashboard(index: dict, pname: str) -> dict:
         'tasks': {
             'blocked': [t for t in tasks if t.get('status') == 'blocked'],
             'in_progress': [t for t in tasks if t.get('status') == 'in_progress'],
+            'assigned': [t for t in tasks if t.get('status') == 'assigned'],
+            'submitted': [t for t in tasks if t.get('status') == 'submitted'],
+            'in_review': [t for t in tasks if t.get('status') == 'in_review'],
+            'reviewed_pass': [t for t in tasks if t.get('status') == 'reviewed_pass'],
+            'reviewed_fail': [t for t in tasks if t.get('status') == 'reviewed_fail'],
             'todo': [t for t in tasks if t.get('status') == 'todo'],
             'done': [t for t in tasks if t.get('status') == 'done'],
         },
@@ -807,8 +812,36 @@ def _write_tasks_md(project_dir: Path, tasks: list):
 |----|------|--------|----------|--------|
 """
     for t in tasks:
-        if t.get('status') == 'in_progress':
+        if t.get('status') in ('in_progress', 'reviewed_fail'):
+            fail_mark = ' ❌需要返工' if t.get('status') == 'reviewed_fail' else ''
+            content += f"| {t['id']} | {t['title']}{fail_mark} | {t.get('assignee', '—')} | {t.get('estimated_hours', '—')}h | {t.get('priority', '—')} |\n"
+
+    content += """
+## 📋 Assigned
+| ID | 任务 | 负责人 | 预计工时 | 优先级 |
+|----|------|--------|----------|--------|
+"""
+    for t in tasks:
+        if t.get('status') == 'assigned':
             content += f"| {t['id']} | {t['title']} | {t.get('assignee', '—')} | {t.get('estimated_hours', '—')}h | {t.get('priority', '—')} |\n"
+
+    content += """
+## 📤 Submitted (Awaiting Review)
+| ID | 任务 | 负责人 | 提交时间 | 审查人 |
+|----|------|--------|----------|--------|
+"""
+    for t in tasks:
+        if t.get('status') == 'submitted':
+            content += f"| {t['id']} | {t['title']} | {t.get('assignee', '—')} | {t.get('updated_at', '—')[:10]} | TL |\n"
+
+    content += """
+## 🔍 In Review
+| ID | 任务 | 负责人 | 审查人 | 状态 |
+|----|------|--------|--------|------|
+"""
+    for t in tasks:
+        if t.get('status') == 'in_review':
+            content += f"| {t['id']} | {t['title']} | {t.get('assignee', '—')} | TL | 审查中... |\n"
 
     content += """
 ## 🔵 Todo
@@ -825,7 +858,7 @@ def _write_tasks_md(project_dir: Path, tasks: list):
 |----|------|--------|------|
 """
     for t in tasks:
-        if t.get('status') == 'done':
+        if t.get('status') in ('done', 'reviewed_pass'):
             content += f"| {t['id']} | {t['title']} | {t.get('assignee', '—')} | {t.get('updated_at', t.get('created_at', '—'))[:10]} |\n"
 
     tasks_file.write_text(content, encoding='utf-8')
