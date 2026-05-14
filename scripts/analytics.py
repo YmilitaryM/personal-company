@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Analytics Engine — Team velocity, quality trends, cycle time, predictive alerts.
+Analytics Engine — Quality trends, cycle time, predictive alerts.
 
 Usage:
   python3 analytics.py [--project <name>] [--alert]
@@ -44,42 +44,6 @@ def _file_lock(lock_path):
 
 
 # ─── Core Analytics ───
-
-def calculate_velocity(project_name: str = None) -> dict:
-    """Calculate sprint velocity for projects."""
-    index = _load_index()
-    projects = index.get('projects', {})
-
-    velocities = {}
-    target = [project_name] if project_name else projects.keys()
-
-    for pname in target:
-        sprints_dir = PROJECTS_DIR / pname / '.sprints'
-        if not sprints_dir.exists():
-            continue
-
-        completed_sprints = []
-        for sf in sorted(sprints_dir.glob('sprint-*.json')):
-            sprint = json.loads(sf.read_text())
-            if sprint.get('status') == 'completed':
-                completed_sprints.append(sprint)
-
-        if completed_sprints:
-            points = [s.get('completed_points', 0) for s in completed_sprints]
-            velocities[pname] = {
-                'sprints_completed': len(completed_sprints),
-                'total_points': sum(points),
-                'avg_velocity': sum(points) / len(points),
-                'max_velocity': max(points),
-                'min_velocity': min(points),
-                'trend': 'up' if len(points) > 1 and points[-1] > points[-2] else
-                         'down' if len(points) > 1 and points[-1] < points[-2] else 'stable',
-            }
-        else:
-            velocities[pname] = {'sprints_completed': 0, 'avg_velocity': 0}
-
-    return velocities
-
 
 def calculate_quality(project_name: str = None) -> dict:
     """Calculate quality metrics from review scores and bugs."""
@@ -160,33 +124,15 @@ def calculate_cycle_time(project_name: str = None) -> dict:
 
 
 def calculate_team_health() -> dict:
-    """Calculate overall team health metrics."""
+    """Calculate overall project health metrics."""
     index = _load_index()
     projects = index.get('projects', {})
-    team = index.get('team', {})
 
     # Project health
     total = len(projects)
     at_risk = sum(1 for p in projects.values() if '🔴' in p.get('status', ''))
     delayed = sum(1 for p in projects.values() if '延迟' in p.get('status', ''))
     blocked = sum(len(p.get('blockers', [])) for p in projects.values())
-
-    # Team health
-    members = team.get('members', {})
-    overloaded = sum(1 for m in members.values() if m.get('load', 0) > 100)
-    idle_members = sum(1 for m in members.values() if m.get('load', 0) < 30)
-
-    # Pool health
-    pools = team.get('pools', {})
-    pool_health = {}
-    for pool_name, pool in pools.items():
-        utilization = (pool.get('assigned', 0) / max(pool.get('total', 1), 1)) * 100
-        pool_health[pool_name] = {
-            'utilization': utilization,
-            'status': 'overloaded' if utilization > 90 else
-                      'high' if utilization > 75 else
-                      'normal' if utilization > 40 else 'low',
-        }
 
     return {
         'projects': {
@@ -195,11 +141,6 @@ def calculate_team_health() -> dict:
             'delayed': delayed,
             'total_blockers': blocked,
         },
-        'team': {
-            'overloaded': overloaded,
-            'idle': idle_members,
-        },
-        'pools': pool_health,
     }
 
 
@@ -212,7 +153,6 @@ def check_alerts() -> list:
 
     index = _load_index()
     projects = index.get('projects', {})
-    team = index.get('team', {})
 
     for pname, pdata in projects.items():
         # Deadline alert
@@ -289,18 +229,6 @@ def check_alerts() -> list:
                     'date': today.strftime('%Y-%m-%d'),
                 })
 
-    # Team overload alerts
-    for mid, mdata in team.get('members', {}).items():
-        load = mdata.get('load', 0)
-        if load > 100:
-            alerts.append({
-                'project': 'team',
-                'type': 'overload',
-                'severity': 'high',
-                'message': f'{mdata["name"]} 超负荷 ({load}%)',
-                'date': today.strftime('%Y-%m-%d'),
-            })
-
     # Save alerts (deduplicate within same day)
     with _file_lock(ALERTS_LOCK):
         ALERTS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -352,10 +280,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='AI Team Analytics Engine')
     parser.add_argument('--project', type=str, help='Specific project name')
     parser.add_argument('--alert', action='store_true', help='Run alert checks')
-    parser.add_argument('--velocity', action='store_true', help='Show velocity metrics')
     parser.add_argument('--quality', action='store_true', help='Show quality metrics')
     parser.add_argument('--cycle', action='store_true', help='Show cycle time metrics')
-    parser.add_argument('--health', action='store_true', help='Show team health')
+    parser.add_argument('--health', action='store_true', help='Show project health')
     parser.add_argument('--all', action='store_true', help='Show all metrics')
 
     args = parser.parse_args()
@@ -368,13 +295,6 @@ if __name__ == '__main__':
             print(f"{sev} [{a['type']}] {a['project']}: {a['message']}")
         if not alerts:
             print('✅ 无告警')
-
-    if args.velocity or args.all:
-        v = calculate_velocity(args.project)
-        print('\n=== 团队速度 ===')
-        for pname, data in v.items():
-            print(f"  {pname}: avg={data['avg_velocity']:.1f}pts/sprint "
-                  f"({data['sprints_completed']} sprints) trend={data.get('trend', 'N/A')}")
 
     if args.quality or args.all:
         q = calculate_quality(args.project)
@@ -394,9 +314,5 @@ if __name__ == '__main__':
 
     if args.health or args.all:
         h = calculate_team_health()
-        print('\n=== 团队健康 ===')
+        print('\n=== 项目健康 ===')
         print(f"  项目: {h['projects']['total']}总 / {h['projects']['at_risk']}风险 / {h['projects']['delayed']}延迟 / {h['projects']['total_blockers']}阻塞")
-        print(f"  人员: {h['team']['overloaded']}超负荷 / {h['team']['idle']}空闲")
-        print('  资源池:')
-        for pool, data in h['pools'].items():
-            print(f"    {pool}: {data['utilization']:.0f}% ({data['status']})")

@@ -1,6 +1,6 @@
 {
   "name": "ai-dev-team",
-  "description": "AI-powered development team plugin — 33-person software organization with role-based agents, dashboards, independent 3-person review board, MCP server, DevOps, sprint management, knowledge base, analytics, reports, and project templates.",
+  "description": "AI-powered development team plugin — multi-agent software organization with role-based agents, independent 3-person review board, MCP server, DevOps, knowledge base, analytics, reports, and project templates.",
   "version": "0.3.0",
   "author": {
     "name": "AI Team Builder",

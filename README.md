@@ -1,6 +1,6 @@
 # AI Dev Team Plugin
 
-运行在 Claude Code 中的完整 AI 开发团队 —— 33人软件组织，自主协作从需求到交付。
+运行在 Claude Code 中的完整 AI 开发团队 —— 多 Agent 软件组织，自主协作从需求到交付。
 
 **当前版本**: v0.3.0
 
@@ -307,26 +307,26 @@ DG4 (待交付)       → ≥8.0/10  部署、文档、验收标准
 
 完整评分细则见 `docs/review-rubric.md`，评审记录模板见 `docs/review-template.md`。
 
-## 团队规模（33人）
+## Agent 角色
 
-| 角色 | 人数 | 模型 | 职责 |
-|------|------|------|------|
-| CTO | 1 | opus | 立项审批、资源调配、架构审批、僵局仲裁、交付签署 |
-| Architect | 1 | opus | 技术标准、架构治理 |
-| PM | 3 | opus | 产品需求（AI/ML、IoT、App&Web） |
-| Tech Lead | 3 | opus | 组建团队、任务分配、后台代码审查、进度监控、预审 |
-| Senior Engineer | 12 | inherit | 主力开发 |
-| Domain Engineer | 6 | inherit | ML、IoT、Agent 专家 |
-| Designer | 4 | opus | UI/UX 设计（Figma MCP） |
-| DevOps/SRE | 2 | inherit | CI/CD、基础设施 |
-| Market Manager | 1 | inherit | 市场分析、竞品情报 |
-| Reviewer R1/R2/R3 | 3 | opus | 独立评审（并行隔离运行） |
+| 角色 | 模型 | 职责 |
+|------|------|------|
+| CTO | opus | 立项审批、资源调配、架构审批、僵局仲裁、交付签署 |
+| Architect | opus | 技术标准、架构治理 |
+| PM | opus | 产品需求（AI/ML、IoT、App&Web） |
+| Tech Lead | opus | 组建团队、任务分配、后台代码审查、进度监控、预审 |
+| Senior Engineer | inherit | 主力开发 |
+| Domain Engineer | inherit | ML、IoT、Agent 专家 |
+| Designer | opus | UI/UX 设计（Figma MCP） |
+| DevOps/SRE | inherit | CI/CD、基础设施 |
+| Market Manager | inherit | 市场分析、竞品情报 |
+| Reviewer R1/R2/R3 | opus | 独立评审（并行隔离运行） |
 
 ## 插件能力一览
 
 - **12 个 Slash 命令** — 按角色调用 + 全流程自动流水线 + TDD
 - **11 个 Agent 角色** — 含 3 个独立 Reviewer（context: fork 并行）
-- **27 个 MCP 工具** — 项目/任务/评审/Sprint/会议/知识库/报表/交接/Git
+- **19 个 MCP 工具** — 项目/任务/评审/知识库/报表/Git
 - **9 阶段自动流水线** — 一键 `/pipeline start` 从立项到交付，支持断点恢复、决策追溯链
 - **Web Dashboard** — 浏览器实时监控，公司/部门/项目三级视图，30s 自动刷新
 - **4 阶段门禁评审** — DG1-DG4，3轮辩论式（独立评审→交叉辩论→合议裁决），僵局时CTO仲裁

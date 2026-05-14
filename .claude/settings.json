@@ -23,7 +23,6 @@
       "Bash(pip *)",
       "Read(./projects/**)",
       "Read(./docs/**)",
-      "Read(./dashboards/**)",
       "Read(./templates/**)",
       "Read(./knowledge-base/**)",
       "Write(./projects/**)",

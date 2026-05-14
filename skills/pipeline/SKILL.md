@@ -128,7 +128,7 @@ Your job:
    - Project scope summary (1 paragraph)
    - Assigned PM and rationale
    - Product direction (ML/IoT/Agent/App&Web)
-   - Resource forecast: which team pools will be needed, estimated headcount, any overload risks
+   - Resource forecast: which agent types will be needed, estimated effort
    - Initial risk assessment
 8. Record a charter_approval decision in the pipeline state decisions array:
    - Why this project is worth resources
@@ -341,12 +341,11 @@ TECHNICAL DESIGN:
    - Each task: specify required skills (backend/frontend/ML/IoT/Agent)
    - Tasks ordered by dependency, each completable in one session
    - Tag tasks that relate to CTO conditions (e.g., "CONDITION: Mobile 3D degradation") so they are validated during quality gates
-8. Create initial sprint via mcp__ai-team-db__create_sprint
-9. Update project status: set phase to "planning"
+8. Update project status: set phase to "planning"
 
 TASK ASSIGNMENT:
-10. For each task, assign an engineer based on skill match and current load (<85%)
-11. Use mcp__ai-team-db__update_task(assignee=..., status="assigned")
+9. For each task, assign to an appropriate agent based on skill match
+10. Use mcp__ai-team-db__update_task(assignee=..., status="assigned")
 12. Record task_assignment decisions
 
 CROSS-PHASE VERIFICATION:
@@ -431,8 +430,7 @@ For each task in dependency order (respecting dependencies — don't start a tas
 8. REBALANCING: If engineer blocked >1 day or task failed review twice, reassign or escalate.
 
 9. ESCALATION: If >30% of tasks fail review or a blocker cannot be resolved:
-   - Use mcp__ai-team-db__create_handoff(from_role="TL", to_role="CTO", ...)
-   - Detail: what's blocked, what you tried, what you need from CTO
+   - Escalate to CTO agent with: what's blocked, what you tried, what you need
 
 AFTER ALL TASKS DONE:
 10. Internal Pre-Review — self-assess before DG2:
@@ -440,9 +438,8 @@ AFTER ALL TASKS DONE:
     - "What I am unsure about"
     - "Known issues I am accepting"
     Record as pre_review_assessment decision.
-11. Log retrospective via mcp__ai-team-db__log_meeting(type="retrospective")
-12. Mark development phase done, create handoff to Review Board
-13. Update project status: set phase to "development_complete"
+11. Mark development phase done — the task board and code artifacts ARE the handoff to Review Board
+12. Update project status: set phase to "development_complete"
 
 Return: task completion summary (N/M), review statistics (pass rate), pre-review self-assessment, any escalations.
 ```

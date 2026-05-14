@@ -28,9 +28,8 @@ from mcp.types import Tool, TextContent, ServerCapabilities, ToolsCapability
 
 # Import extended tools from same directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from extended import (EXTENDED_TOOL_DEFS, create_sprint, update_sprint, list_sprints,
-                      log_meeting, list_meetings, add_knowledge, search_knowledge,
-                      generate_report, create_handoff, list_handoffs, update_handoff,
+from extended import (EXTENDED_TOOL_DEFS, add_knowledge, search_knowledge,
+                      generate_report,
                       git_create_branch, git_commit, git_get_status, git_merge_branch)
 
 # Import project initializer
@@ -122,25 +121,18 @@ def save_index(data: dict):
 def _default_team():
     return {
         'members': {
-            'cto': {'name': 'CTO', 'status': 'active', 'load': 100, 'assigned_projects': []},
-            'pm_a': {'name': 'PM-A (AI/ML)', 'status': 'active', 'load': 0, 'assigned_projects': []},
-            'pm_b': {'name': 'PM-B (IoT)', 'status': 'active', 'load': 0, 'assigned_projects': []},
-            'pm_c': {'name': 'PM-C (App&Web)', 'status': 'active', 'load': 0, 'assigned_projects': []},
-            'tl_a': {'name': 'TL-A (AI/ML)', 'status': 'active', 'load': 0, 'assigned_projects': []},
-            'tl_b': {'name': 'TL-B (IoT)', 'status': 'active', 'load': 0, 'assigned_projects': []},
-            'tl_c': {'name': 'TL-C (App&Web)', 'status': 'active', 'load': 0, 'assigned_projects': []},
-            'market': {'name': 'Market Manager', 'status': 'active', 'load': 50, 'assigned_projects': []},
-            'devops_1': {'name': 'DevOps-1', 'status': 'active', 'load': 0, 'assigned_projects': []},
-            'devops_2': {'name': 'DevOps-2', 'status': 'active', 'load': 0, 'assigned_projects': []},
+            'cto': {'name': 'CTO', 'status': 'active', 'assigned_projects': []},
+            'pm_a': {'name': 'PM-A (AI/ML)', 'status': 'active', 'assigned_projects': []},
+            'pm_b': {'name': 'PM-B (IoT)', 'status': 'active', 'assigned_projects': []},
+            'pm_c': {'name': 'PM-C (App&Web)', 'status': 'active', 'assigned_projects': []},
+            'tl_a': {'name': 'TL-A (AI/ML)', 'status': 'active', 'assigned_projects': []},
+            'tl_b': {'name': 'TL-B (IoT)', 'status': 'active', 'assigned_projects': []},
+            'tl_c': {'name': 'TL-C (App&Web)', 'status': 'active', 'assigned_projects': []},
+            'market': {'name': 'Market Manager', 'status': 'active', 'assigned_projects': []},
+            'devops_1': {'name': 'DevOps-1', 'status': 'active', 'assigned_projects': []},
+            'devops_2': {'name': 'DevOps-2', 'status': 'active', 'assigned_projects': []},
         },
-        'pools': {
-            'senior_engineer': {'total': 12, 'assigned': 0, 'idle': 12},
-            'ml_engineer': {'total': 2, 'assigned': 0, 'idle': 2},
-            'iot_engineer': {'total': 2, 'assigned': 0, 'idle': 2},
-            'agent_engineer': {'total': 2, 'assigned': 0, 'idle': 2},
-            'designer': {'total': 4, 'assigned': 0, 'idle': 4},
-            'reviewer': {'total': 3, 'assigned': 0, 'idle': 3},
-        }
+        'agent_roles': ['senior_engineer', 'ml_engineer', 'iot_engineer', 'agent_engineer', 'designer', 'reviewer'],
     }
 
 
@@ -312,13 +304,12 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="update_team_member",
-            description="Update team member status and load",
+            description="Update team member status and project assignment",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "member_id": {"type": "string"},
                     "status": {"type": "string", "enum": ["active", "standby", "idle", "overload", "leave"]},
-                    "load": {"type": "integer", "minimum": 0, "maximum": 150},
                     "assigned_projects": {"type": "array", "items": {"type": "string"}}
                 },
                 "required": ["member_id"]
@@ -569,17 +560,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         member_id = arguments['member_id']
         member = index['team']['members'].get(member_id)
         if not member:
-            # Check pools
-            pool = index['team']['pools'].get(member_id)
-            if pool:
-                for field in ['assigned', 'idle']:
-                    if field in arguments:
-                        pool[field] = arguments[field]
-                save_index(index)
-                return [TextContent(type="text", text=json.dumps({'success': True, 'pool': pool}, ensure_ascii=False, indent=2))]
             return [TextContent(type="text", text=json.dumps({'error': f'Member {member_id} not found'}, ensure_ascii=False))]
 
-        for field in ['status', 'load', 'assigned_projects']:
+        for field in ['status', 'assigned_projects']:
             if field in arguments:
                 member[field] = arguments[field]
         save_index(index)
@@ -588,51 +571,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     elif name == "list_team":
         return [TextContent(type="text", text=json.dumps(index.get('team', {}), ensure_ascii=False, indent=2))]
 
-    # ─── Extended Tools: Sprint, Meetings, KB, Reports ───
-    elif name == "create_sprint":
-        pname = arguments['project_name']
-        if pname not in index['projects']:
-            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
-        project_path = PROJECTS_DIR / pname
-        result = create_sprint(project_path, arguments['sprint_num'],
-                               arguments['start_date'], arguments['end_date'],
-                               arguments.get('goal', ''))
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
-
-    elif name == "update_sprint":
-        pname = arguments['project_name']
-        if pname not in index['projects']:
-            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
-        result = update_sprint(PROJECTS_DIR / pname, arguments['sprint_num'],
-                               **{k: v for k, v in arguments.items()
-                                  if k not in ('project_name', 'sprint_num')})
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
-
-    elif name == "list_sprints":
-        pname = arguments['project_name']
-        if pname not in index['projects']:
-            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
-        result = list_sprints(PROJECTS_DIR / pname)
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
-
-    elif name == "log_meeting":
-        pname = arguments['project_name']
-        if pname not in index['projects']:
-            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
-        result = log_meeting(PROJECTS_DIR / pname, arguments['meeting_type'],
-                             arguments['summary'],
-                             arguments.get('decisions', []),
-                             arguments.get('action_items', []),
-                             arguments.get('attendees', []))
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
-
-    elif name == "list_meetings":
-        pname = arguments['project_name']
-        if pname not in index['projects']:
-            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
-        result = list_meetings(PROJECTS_DIR / pname, arguments.get('meeting_type'))
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
-
+    # ─── Extended Tools: KB, Reports, Git ───
     elif name == "add_knowledge":
         result = add_knowledge(PROJECT_DIR, arguments['topic'], arguments['content'],
                                arguments.get('tags', []), arguments.get('author', ''),
@@ -642,31 +581,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     elif name == "search_knowledge":
         result = search_knowledge(PROJECT_DIR, arguments.get('query', ''),
                                   arguments.get('tags'))
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
-
-    elif name == "create_handoff":
-        pname = arguments['project_name']
-        if pname not in index['projects']:
-            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
-        result = create_handoff(PROJECTS_DIR / pname, arguments['from_role'],
-                                arguments['to_role'], arguments['content'],
-                                arguments.get('deliverable', ''),
-                                arguments.get('acceptance_criteria', []))
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
-
-    elif name == "list_handoffs":
-        pname = arguments['project_name']
-        if pname not in index['projects']:
-            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
-        result = list_handoffs(PROJECTS_DIR / pname, arguments.get('status'))
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
-
-    elif name == "update_handoff":
-        pname = arguments['project_name']
-        if pname not in index['projects']:
-            return [TextContent(type="text", text=json.dumps({'error': f'Project {pname} not found'}, ensure_ascii=False))]
-        result = update_handoff(PROJECTS_DIR / pname, arguments['handoff_id'],
-                                arguments.get('status'), arguments.get('note'))
         return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 
     elif name == "git_create_branch":

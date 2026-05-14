@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Overview
 
-This is an AI-powered development team plugin (`ai-dev-team`) v0.3.0 — a complete 33-person software organization that runs inside Claude Code. The human stakeholder provides requirements and accepts deliverables; the AI team self-organizes to execute.
+This is an AI-powered development team plugin (`ai-dev-team`) v0.3.0 — a multi-agent software organization that runs inside Claude Code. The human stakeholder provides requirements and accepts deliverables; the AI team self-organizes to execute.
 
 **Product scope**: ML algorithms, IoT applications, Agent/Knowledge Base, App & Web.
 
@@ -38,13 +38,11 @@ claude plugin install --scope user .
 |-----------|------|--------------|
 | **12 Skills** | `skills/` | Slash commands: `/cto` `/pm` `/tech-lead` `/architect` `/designer` `/review` `/dashboard` `/project` `/pipeline` `/market` `/devops` `/tdd` |
 | **11 Agents** | `agents/` | Subagent definitions: cto, pm, tech-lead, senior-engineer, domain-engineer, designer (×1), reviewer-r1/r2/r3, devops, market-manager |
-| **MCP Server** | `mcp-server/` | 27 tools: project CRUD, tasks, reviews, sprints, meetings, knowledge base, reports, dashboard, handoffs, git |
-| **Hooks** | `hooks/` | Quality gates, analytics alerts, auto-collection, session init |
-| **Monitors** | `monitors/` | Dashboard refresh, deadline tracking |
-| **Analytics** | `scripts/` | Velocity, quality, cycle time metrics + predictive alerts |
-| **Reports** | `scripts/reports.py` | Daily standup, weekly status, sprint retro auto-generation |
+| **MCP Server** | `mcp-server/` | Project CRUD, tasks, reviews, knowledge base, reports, dashboard |
+| **Analytics** | `scripts/` | Quality, cycle time metrics + predictive alerts |
+| **Reports** | `scripts/reports.py` | Daily standup, weekly status auto-generation |
 | **Templates** | `templates/` | PRD, Tech Spec, Test Plan, CI/CD (GitHub Actions, Docker) |
-| **Docs** | `docs/` | 8 documents covering org structure, roles, workflows, reviews, permissions |
+| **Docs** | `docs/` | 7 documents covering org structure, roles, workflows, reviews, permissions |
 
 ## Stakeholder Commands
 
@@ -92,23 +90,18 @@ bash scripts/start.sh
 
 ### Manual Workflow
 
-## Organization (33 people, 11 Agent types)
+## Agents (12 types)
 
-- **Management (Agents)**: CTO, PM×3, Market Manager (5)
-- **Execution (Agents)**: Tech Lead×3, Senior Engineer×12, Domain Engineer×6 (ML/IoT/Agent), Designer×4 (25)
-- **Operations (Agents)**: DevOps/SRE×2 (2)
-- **Governance (Agents)**: Independent Reviewer R1/R2/R3 (3) — spawned in parallel, truly isolated
-- **Sub-leads**: ML专业组长, Agent专业组长, 嵌入式专业组长, 前端专业组长
+- **Management**: CTO, PM, Market Manager (3)
+- **Execution**: Tech Lead, Senior Engineer, Domain Engineer (ML/IoT/Agent), Designer (4)
+- **Operations**: DevOps/SRE (1)
+- **Governance**: Independent Reviewer R1/R2/R3 (3) — spawned in parallel, truly isolated
 
-## MCP Server Tools (27 total)
+## MCP Server Tools (19 total)
 
 **Core (12)**: list_projects, get_project, create_project, update_project_status, create_task (with file ownership & conflict detection), update_task, list_tasks, create_review, get_review, get_dashboard, update_team_member, list_team
 
-**Extended (15)**: create_sprint, update_sprint, list_sprints, log_meeting, list_meetings, add_knowledge, search_knowledge, generate_report, create_handoff, list_handoffs, update_handoff, git_create_branch, git_commit, git_get_status, git_merge_branch
-
-## Cross-Role Handoff
-
-Formal handoffs between roles/departments via MCP tools: `create_handoff` (records from_role→to_role, deliverable, acceptance criteria), `update_handoff` (accept/reject with notes), `list_handoffs` (filter by pending/accepted/rejected). Handoffs stored per-project in `.handoffs/`.
+**Extended (7)**: add_knowledge, search_knowledge, generate_report, git_create_branch, git_commit, git_get_status, git_merge_branch
 
 ## Designer + Figma
 
@@ -149,10 +142,10 @@ Full rubrics: `docs/review-rubric.md`
 | Script | Purpose |
 |--------|---------|
 | `scripts/init_project.py` | Auto-initialize new project with all templates |
-| `scripts/collect-dashboard.py` | Aggregate dashboard data (prefers .index.json, falls back to parsing .md files). Also generates dashboards/*.md |
+| `scripts/collect-dashboard.py` | Aggregate dashboard data from .index.json |
 | `scripts/web_dashboard.py` | Web-based real-time dashboard (stdlib http.server, port 8080, reads .index.json and .pipeline-state.json) |
-| `scripts/analytics.py` | Velocity, quality, cycle time + predictive alerts (reads .index.json directly) |
-| `scripts/reports.py` | Daily standup, weekly report, sprint retro |
+| `scripts/analytics.py` | Quality, cycle time + predictive alerts (reads .index.json directly) |
+| `scripts/reports.py` | Daily standup, weekly report |
 | `scripts/sync-models.py` | Sync config/models.json → agents/*.md frontmatter |
 
 ## Project Data Structure
@@ -171,6 +164,5 @@ projects/<name>/
 ├── delivery-report.md     # Pipeline delivery report
 ├── .pipeline-state.json   # Pipeline progress (for resume)
 ├── reviews/               # DG1-DG4 review records
-├── .sprints/              # Sprint data (JSON)
-└── .meetings/             # Meeting notes (JSON)
+└── .index.json            # Project metadata index
 ```

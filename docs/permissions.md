@@ -28,7 +28,7 @@
 
 ### CTO
 ```
-允许写: projects/** docs/** dashboards/**
+允许写: projects/** docs/**
 禁止写: (无特别限制，CTO拥有所有文件权限)
 ```
 

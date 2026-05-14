@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Automated Report Generator — Daily standup, weekly status, sprint retro.
+Automated Report Generator — Daily standup, weekly status.
 
 Usage:
   python3 reports.py standup [project]
   python3 reports.py weekly
-  python3 reports.py sprint-retro <project> <sprint-num>
 """
 
 import json
@@ -141,57 +140,9 @@ def generate_weekly() -> str:
     return '\n'.join(lines)
 
 
-def generate_sprint_retro(project_name: str, sprint_num: int) -> str:
-    """Generate sprint retrospective template."""
-    sprints_dir = PROJECTS_DIR / project_name / '.sprints'
-    sprint_file = sprints_dir / f'sprint-{sprint_num:02d}.json'
-
-    sprint_data = {}
-    if sprint_file.exists():
-        sprint_data = json.loads(sprint_file.read_text())
-
-    lines = [
-        f"# 🔄 Sprint {sprint_num} Retro — {project_name}",
-        f"**日期**: {datetime.now().strftime('%Y-%m-%d')}",
-        f"**Sprint目标**: {sprint_data.get('goal', '—')}",
-        f"**完成点数**: {sprint_data.get('completed_points', 0)} / {sprint_data.get('total_points', 0)}",
-        "",
-        "## ✅ 做得好 (Keep Doing)",
-        "1. ",
-        "2. ",
-        "3. ",
-        "",
-        "## ⚠️ 待改进 (Start Doing)",
-        "1. ",
-        "2. ",
-        "3. ",
-        "",
-        "## ❌ 停止做 (Stop Doing)",
-        "1. ",
-        "2. ",
-        "",
-        "## 📈 数据",
-        f"- 计划点数: {sprint_data.get('total_points', '—')}",
-        f"- 完成点数: {sprint_data.get('completed_points', '—')}",
-        f"- 达成率: {round(sprint_data.get('completed_points', 0) / max(sprint_data.get('total_points', 1), 1) * 100)}%",
-        f"- 速率: {sprint_data.get('velocity', '—')} pts/sprint",
-        "",
-        "## 🎯 下个Sprint目标",
-        "...",
-        "",
-        "## 🏃 行动项",
-        "| 序号 | 行动 | 负责人 | 截止 |",
-        "|------|------|--------|------|",
-        "| 1 | | | |",
-        "| 2 | | | |",
-    ]
-
-    return '\n'.join(lines)
-
-
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("Usage: reports.py <standup|weekly|sprint-retro> [args...]")
+        print("Usage: reports.py <standup|weekly> [args...]")
         sys.exit(1)
 
     cmd = sys.argv[1]
@@ -202,12 +153,6 @@ if __name__ == '__main__':
 
     elif cmd == 'weekly':
         print(generate_weekly())
-
-    elif cmd == 'sprint-retro':
-        if len(sys.argv) < 4:
-            print("Usage: reports.py sprint-retro <project> <sprint-num>")
-            sys.exit(1)
-        print(generate_sprint_retro(sys.argv[2], int(sys.argv[3])))
 
     else:
         print(f"Unknown command: {cmd}")
