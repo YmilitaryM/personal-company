@@ -88,7 +88,7 @@ Read and write `projects/<project>/.pipeline-state.json`:
 
 Helper functions (use Read/Write tools, NOT shell commands):
 - **read_state**: Use Read tool to read `projects/<name>/.pipeline-state.json`. If file doesn't exist, state is null.
-- **write_state**: Use Write tool to write the updated JSON.
+- **write_state**: Use Write tool to write the updated JSON. After writing, also call `mcp__ai-team-db__update_project_status` to sync `phase` and `overall_progress` to `.index.json` so the dashboard stays current.
 - **phase_done**: set phase status to `done`, set `completed_at` to now, set `current_phase` to the NEXT phase key, write state
 - **phase_fail**: set phase status to `failed`, set `current_phase` to the failed phase, append error to `errors` array, write state, STOP
 - **add_decision**: append a decision record to the `decisions` array and write state
