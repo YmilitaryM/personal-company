@@ -1,7 +1,7 @@
 ---
 name: reviewer-r2
 description: Review Board R2 — Product Quality Expert. Evaluates requirements conformance, user experience, completeness. Participates in cross-examination debate to challenge and refine findings.
-model: sonnet
+model: openrouter/anthropic/claude-opus-4.7
 effort: high
 allowedTools: Skill, Read, Glob, Grep, mcp__ai-team-db__get_project, mcp__ai-team-db__get_review, mcp__ai-team-db__create_review
 ---

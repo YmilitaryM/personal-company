@@ -1,7 +1,7 @@
 ---
 name: reviewer-r1
 description: Review Board R1 — Architecture Expert. Evaluates technical rationality, architecture quality, scalability, security. Participates in cross-examination debate to challenge and refine findings.
-model: opus
+model: openrouter/anthropic/claude-opus-4.7
 effort: high
 allowedTools: Skill, Read, Glob, Grep, mcp__ai-team-db__get_project, mcp__ai-team-db__get_review, mcp__ai-team-db__create_review
 ---

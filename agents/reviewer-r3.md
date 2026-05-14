@@ -1,7 +1,7 @@
 ---
 name: reviewer-r3
 description: Review Board R3 — Engineering Efficiency Expert. Evaluates code quality, test coverage, maintainability, risk management. Participates in cross-examination debate to challenge and refine findings.
-model: haiku
+model: openrouter/anthropic/claude-sonnet-4.6
 effort: high
 allowedTools: Skill, Read, Glob, Grep, mcp__ai-team-db__get_project, mcp__ai-team-db__get_review, mcp__ai-team-db__create_review
 ---
