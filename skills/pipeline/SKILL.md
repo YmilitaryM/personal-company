@@ -335,116 +335,135 @@ After all tasks complete (or all remaining are blocked), mark development `done`
 
 Output: development summary.
 
-### Step 7: Phase 6 — Quality Gates (DG1-DG4)
+### Step 7: Phase 6 — Quality Gates (DG1-DG4) — Three-Round Review with Debate
 
 For each gate (DG1, DG2, DG3, DG4) in order:
 
 Update quality phase with current gate `in_progress`.
 
-**DG1 (方案设计完成)** — reviews: architecture compliance, UX design, task decomposition.
-**DG2 (核心开发完成)** — reviews: code quality, design fidelity, test coverage.
-**DG3 (质量保证完成)** — reviews: performance, security, bug rate.
-**DG4 (待交付)** — reviews: deployment readiness, documentation, acceptance criteria.
+**DG1 (方案设计完成)** — reviews: architecture compliance, UX design, task decomposition, TDD test plan exists
+**DG2 (核心开发完成)** — reviews: code quality, design fidelity, TDD compliance (tests before implementation?), test coverage ≥80%
+**DG3 (质量保证完成)** — reviews: performance, security, bug rate, regression test coverage
+**DG4 (待交付)** — reviews: deployment readiness, documentation, acceptance criteria compliance
 
-For each gate, spawn 3 reviewer agents IN PARALLEL (same pattern as `skills/review/SKILL.md`):
+Each gate follows a THREE-ROUND process (see `skills/review/SKILL.md` for full details):
+
+---
+
+**Round 1: Independent Review (并行独立评审)**
+
+Spawn reviewer-r1, reviewer-r2, reviewer-r3 SIMULTANEOUSLY (one message, `run_in_background: false`). They must NOT see each other's work.
 
 ```
-Spawn reviewer-r1, reviewer-r2, reviewer-r3 simultaneously.
-
-Each receives:
+Each reviewer receives:
 - Gate: <DG1/DG2/DG3/DG4>
 - Project: <name>
 - Context: read projects/<name>/prd.md, tech-spec.md, tasks.md, and all previous review records
+- Instruction: Review ALL aspects (not just your specialty), weigh your specialty more heavily.
+  For each dimension: score (0-10) with specific evidence.
+  Vote: approve/changes_requested/reject with rationale.
 
-For DG1: review architecture, UX design, task decomposition, TDD test plan exists
-For DG2: review code quality, design fidelity, TDD compliance (tests before implementation?), test coverage ≥80%
-For DG3: review performance, security, bug rate, regression test coverage
-For DG4: review deployment readiness, documentation, acceptance criteria compliance
-
-Each reviewer returns JSON:
+Return JSON:
 {
   "vote": "approve|changes_requested|reject",
   "overall_score": <0-10>,
-  "dimensions": {"dim1": score, ...},
-  "findings": ["finding1", ...],
-  "recommendations": ["rec1", ...]
+  "dimensions": {"dim1": {"score": X, "evidence": "..."}, ...},
+  "findings": [{"finding": "...", "severity": "blocker|major|minor", "evidence": "..."}, ...],
+  "recommendations": ["...", ...]
 }
 ```
 
-Tabulate votes:
-- ≥2 approve → **PASS** — proceed to next gate
-- ≥2 reject → **REJECT** — phase_fail("quality", "Gate <X> rejected")
-- ≥2 changes_requested → **CHANGES REQUIRED** — pause pipeline, record required changes
-- 1 each → **CHANGES REQUIRED** (conservative)
+**Round 2: Cross-Examination Debate (交叉辩论)**
 
-Record each reviewer's vote via `mcp__ai-team-db__create_review`.
+After ALL three Round 1 results are in, compile them into a Debate Brief. Then spawn all 3 reviewers AGAIN in parallel. Each receives the FULL Round 1 results and is told:
 
-After each gate, output a gate summary that includes the findings and recommendations, NOT just the vote tally:
+```
+You are in CROSS-EXAMINATION. You see R1/R2/R3's Round 1 findings.
+
+1. CHALLENGE at least one finding from each other reviewer
+2. IDENTIFY CONFLICTS between perspectives (e.g., architecture vs engineering)
+3. ACKNOWLEDGE what others caught that you MISSED
+4. DEFEND or CONCEDE your own findings when challenged
+
+Return: challenges, conflicts, missed items, concessions, defenses,
+revised_vote, revised_score, debate_summary
+```
+
+**Round 3: Synthesis & Final Verdict (合议裁决)**
+
+After debate, YOU (the pipeline orchestrator) synthesize:
+
+- **Consensus**: findings all three agree on (most reliable)
+- **Dissent**: disagreements that remain after debate (document both sides)
+- **Conflict Resolution**: how cross-perspective conflicts were resolved
+- **Score Changes**: who changed their score and why
+
+Tabulate FINAL (post-debate) votes:
+- ≥2 approve → **PASS**
+- ≥2 reject → **REJECT**  
+- ≥2 changes_requested → **CHANGES REQUIRED**
+- 1 each → **CHANGES REQUIRED**
+
+Record each reviewer's FINAL vote via `mcp__ai-team-db__create_review`.
+
+**Gate Summary Output (must include debate synthesis):**
 
 ```markdown
-## Gate <X> Result: ✅ PASS / 🔄 CHANGES / ❌ REJECT
+## Gate <X>: ✅ PASS / 🔄 CHANGES / ❌ REJECT
 
+### Round 1 — Independent Scores
 | Reviewer | Vote | Score |
 |----------|------|-------|
-| R1 (Architecture) | approve | 7.5 |
-| R2 (Product) | changes_requested | 6.0 |
-| R3 (Engineering) | approve | 7.0 |
+| R1 (Architecture) | X | X.X |
+| R2 (Product) | X | X.X |
+| R3 (Engineering) | X | X.X |
 
-### Key Findings
-- [R1] <most important finding>
-- [R2] <most important finding>
-- [R3] <most important finding>
+### Round 2 — Debate Highlights
+- R1 challenged R3's finding on <X>: R3 conceded, revised score -0.5
+- R2 caught <Y> that both R1 and R3 missed
+- R1 and R3 disagree on <Z>: documented as dissent
 
-### Recommended Actions
-1. <actionable recommendation from reviewers>
-2. <actionable recommendation from reviewers>
-3. ...
+### Round 3 — Final Verdict
+| Reviewer | Final Vote | Final Score | Changed? |
+|----------|-----------|-------------|----------|
+| R1 | X | X.X | — |
+| R2 | X | X.X | -0.5 (conceded architecture concern) |
+| R3 | X | X.X | — |
+
+### Consensus (all agree)
+1. ...
+2. ...
+
+### Dissent (unresolved)
+1. R1 vs R3 on <issue>: R1 argues X, R3 argues Y
+
+### Synthesized Action Items
+1. **[P0]** ...
+2. **[P1]** ...
 ```
 
 **If PASS (≥2 approve):**
 - Record the gate as passed
-- Execute **Phase Handoff**: spawn the agent responsible for the NEXT phase with a brief context:
-  - "Gate <X> passed. Key reviewer feedback to carry forward: <summarize top findings>. Proceed with your phase."
-  - This ensures the next team knows what the reviewers flagged, even if it passed.
+- Execute **Phase Handoff**: spawn the next phase agent with the SYNTHESIZED debate findings:
+  - "Gate <X> passed. Consensus findings: <summary>. Unresolved dissent to monitor: <summary>."
 - Continue to next gate.
 
 **If CHANGES_REQUESTED (≥2 changes_requested, or tie):**
-- Do NOT pause for user — auto-rework and re-review (max 3 rounds):
-
-  **Rework Loop (up to 3 rounds):**
-  
-  1. Collect all findings and recommendations from the 3 reviewers into a single Rework Brief
-  2. Determine the responsible agent based on the gate:
-     - **DG1 (方案设计)** → `architect` agent: fix architecture issues, then `tech-lead` agent: update tech spec
-     - **DG2 (核心开发)** → `tech-lead` agent: review findings with engineers, then spawn `senior-engineer` agents to fix code
-     - **DG3 (质量保证)** → `senior-engineer` agents: fix bugs, improve tests, address performance/security issues
-     - **DG4 (待交付)** → `tech-lead` agent: fix deployment issues, improve docs, resolve remaining blockers
-  3. Spawn the responsible agent(s) with:
-     ```
-     Project: <name>
-     Gate: <X> — Rework Round <N>/3
-     Review Findings (must address ALL):
-     <list each finding with severity from reviewers>
-     
-     Recommended Actions:
-     <list each recommendation>
-     
-     Your job: Fix EVERY finding listed above. For each finding, either:
-     - Implement the recommended fix, OR
-     - Write a brief justification if you disagree (will be reviewed again)
-     
-     After fixing, update relevant project files and commit changes.
-     Return: list of what was fixed and how.
-     ```
-  4. After the agent completes, re-trigger the SAME gate review (spawn R1/R2/R3 in parallel again)
-  5. If pass → continue. If changes_requested again → increment round, go to step 1.
-  6. If still changes_requested after 3 rounds → phase_fail("quality", "Gate <X> failed after 3 rework rounds")
-  7. If **REJECT** at any point → phase_fail immediately (reject means fundamental problems, can't fix by iteration)
+- Auto-rework and re-review (max 3 rounds), using the DEBATE SYNTHESIS as the rework brief:
+  1. Extract the synthesized action items (not raw findings — the debate already filtered noise)
+  2. Spawn the responsible agent(s) based on gate:
+     - **DG1** → `architect` then `tech-lead`
+     - **DG2** → `tech-lead` then `senior-engineer`
+     - **DG3** → `senior-engineer`
+     - **DG4** → `tech-lead`
+  3. Agent receives: "Fix these specific items (from debate synthesis): <list>. For each, implement the fix or write a justification."
+  4. Re-run the FULL three-round review (R1/R2/R3 → Debate → Verdict)
+  5. If still changes_requested after 3 rounds → phase_fail
 
 **If REJECT (≥2 reject):**
-- Record the rejection with all findings
+- Record the rejection with debate synthesis
 - phase_fail("quality", "Gate <X> rejected — fundamental issues require stakeholder decision")
-- Do NOT auto-rework (rejection means the approach itself is wrong, not just implementation)
+- Do NOT auto-rework
 
 After all 4 gates pass, mark quality `done`, set `current_phase` to `delivery`, write state.
 
