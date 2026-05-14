@@ -51,7 +51,37 @@ def load_dashboard_data(projects_dir: Path) -> dict:
                 'source': 'error', 'error': 'Failed to parse .index.json'}
 
     projects = []
-    for pname, pdata in index.get('projects', {}).items():
+    index_project_names = set(index.get('projects', {}).keys())
+
+    # Also discover projects from directories not yet in .index.json
+    extra_projects = {}
+    if projects_dir.exists():
+        for item in sorted(projects_dir.iterdir()):
+            if not item.is_dir() or item.name.startswith('.'):
+                continue
+            if item.name in index_project_names:
+                continue
+            pipe_file = item / '.pipeline-state.json'
+            if pipe_file.exists():
+                try:
+                    pipe = json.loads(pipe_file.read_text())
+                except (json.JSONDecodeError, IOError):
+                    pipe = {}
+                extra_projects[item.name] = {
+                    'direction': pipe.get('product_direction', 'Unknown'),
+                    'tech_lead': pipe.get('tech_lead', 'Unassigned'),
+                    'phase': pipe.get('current_phase', 'Unknown'),
+                    'overall_progress': pipe.get('overall_progress', 0),
+                    'status': pipe.get('status', 'ok'),
+                    'blockers': pipe.get('blockers', []),
+                    'tasks': [],
+                    'reviews': {},
+                    'start_date': pipe.get('started_at', ''),
+                    'target_date': pipe.get('target_date', ''),
+                }
+
+    all_projects = {**extra_projects, **index.get('projects', {})}
+    for pname, pdata in all_projects.items():
         tasks = pdata.get('tasks', [])
         tasks_by_status = {'blocked': 0, 'in_progress': 0, 'assigned': 0, 'submitted': 0, 'in_review': 0, 'reviewed_pass': 0, 'reviewed_fail': 0, 'todo': 0, 'done': 0}
         for t in tasks:
