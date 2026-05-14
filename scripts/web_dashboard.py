@@ -36,51 +36,85 @@ def _is_status(status: str, check: str) -> bool:
     return False
 
 
+def _get_all_project_dirs(base_dir: Path) -> list[Path]:
+    """Get all project directories: base dir + any registered via MCP server."""
+    dirs = [base_dir]
+    registry = Path.home() / '.ai-dev-team' / 'project-dirs'
+    if registry.exists():
+        for line in registry.read_text().splitlines():
+            line = line.strip()
+            if line:
+                p = Path(line) / 'projects'
+                if p.exists() and p not in dirs:
+                    dirs.append(p)
+    return dirs
+
+
+def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_project_names: set):
+    """Scan a single projects_dir for directories with .pipeline-state.json not in index."""
+    if not projects_dir.exists():
+        return
+    for item in sorted(projects_dir.iterdir()):
+        if not item.is_dir() or item.name.startswith('.'):
+            continue
+        if item.name in index_project_names or item.name in extra_projects:
+            continue
+        pipe_file = item / '.pipeline-state.json'
+        if pipe_file.exists():
+            try:
+                pipe = json.loads(pipe_file.read_text())
+            except (json.JSONDecodeError, IOError):
+                pipe = {}
+            extra_projects[item.name] = {
+                'direction': pipe.get('product_direction', 'Unknown'),
+                'tech_lead': pipe.get('tech_lead', 'Unassigned'),
+                'phase': pipe.get('current_phase', 'Unknown'),
+                'overall_progress': pipe.get('overall_progress', 0),
+                'status': pipe.get('status', 'ok'),
+                'blockers': pipe.get('blockers', []),
+                'tasks': [],
+                'reviews': {},
+                'start_date': pipe.get('started_at', ''),
+                'target_date': pipe.get('target_date', ''),
+            }
+
+
 def load_dashboard_data(projects_dir: Path) -> dict:
-    """Load aggregated dashboard data from .index.json, same pattern as collect-dashboard.py."""
-    index_file = projects_dir / '.index.json'
-    if not index_file.exists():
-        return {'projects': [], 'stats': {'total_projects': 0, 'active_projects': 0,
-                'total_blockers': 0, 'at_risk': [], 'delayed': [], 'avg_progress': 0},
-                'generated_at': datetime.now().isoformat(), 'source': 'empty'}
+    """Load aggregated dashboard data from .index.json across all registered dirs."""
+    all_dirs = _get_all_project_dirs(projects_dir)
 
-    try:
-        index = json.loads(index_file.read_text())
-    except (json.JSONDecodeError, IOError):
-        return {'projects': [], 'stats': {'total_projects': 0}, 'generated_at': datetime.now().isoformat(),
-                'source': 'error', 'error': 'Failed to parse .index.json'}
-
-    projects = []
-    index_project_names = set(index.get('projects', {}).keys())
-
-    # Also discover projects from directories not yet in .index.json
+    all_index_projects = {}
     extra_projects = {}
-    if projects_dir.exists():
-        for item in sorted(projects_dir.iterdir()):
-            if not item.is_dir() or item.name.startswith('.'):
-                continue
-            if item.name in index_project_names:
-                continue
-            pipe_file = item / '.pipeline-state.json'
-            if pipe_file.exists():
-                try:
-                    pipe = json.loads(pipe_file.read_text())
-                except (json.JSONDecodeError, IOError):
-                    pipe = {}
-                extra_projects[item.name] = {
-                    'direction': pipe.get('product_direction', 'Unknown'),
-                    'tech_lead': pipe.get('tech_lead', 'Unassigned'),
-                    'phase': pipe.get('current_phase', 'Unknown'),
-                    'overall_progress': pipe.get('overall_progress', 0),
-                    'status': pipe.get('status', 'ok'),
-                    'blockers': pipe.get('blockers', []),
-                    'tasks': [],
-                    'reviews': {},
-                    'start_date': pipe.get('started_at', ''),
-                    'target_date': pipe.get('target_date', ''),
-                }
+    index_project_names = set()
 
-    all_projects = {**extra_projects, **index.get('projects', {})}
+    for d in all_dirs:
+        index_file = d / '.index.json'
+        if index_file.exists():
+            try:
+                index = json.loads(index_file.read_text())
+                for pname, pdata in index.get('projects', {}).items():
+                    if pname not in all_index_projects:
+                        all_index_projects[pname] = pdata
+                        index_project_names.add(pname)
+            except (json.JSONDecodeError, IOError):
+                pass
+
+    if not all_index_projects and not extra_projects:
+        # Check if any directories have projects at all
+        has_any = any(
+            d.exists() and any(i.is_dir() and not i.name.startswith('.') for i in d.iterdir())
+            for d in all_dirs
+        )
+        if not has_any:
+            return {'projects': [], 'stats': {'total_projects': 0, 'active_projects': 0,
+                    'total_blockers': 0, 'at_risk': [], 'delayed': [], 'avg_progress': 0},
+                    'generated_at': datetime.now().isoformat(), 'source': 'empty'}
+
+    for d in all_dirs:
+        _scan_dir_for_projects(d, extra_projects, index_project_names)
+
+    all_projects = {**extra_projects, **all_index_projects}
+    projects = []
     for pname, pdata in all_projects.items():
         tasks = pdata.get('tasks', [])
         tasks_by_status = {'blocked': 0, 'in_progress': 0, 'assigned': 0, 'submitted': 0, 'in_review': 0, 'reviewed_pass': 0, 'reviewed_fail': 0, 'todo': 0, 'done': 0}
@@ -144,26 +178,33 @@ def load_dashboard_data(projects_dir: Path) -> dict:
 
 
 def load_pipeline_state(projects_dir: Path, project_name: str) -> dict:
-    """Load pipeline state for a specific project."""
-    state_file = projects_dir / project_name / '.pipeline-state.json'
-    if not state_file.exists():
-        return None
-    try:
-        return json.loads(state_file.read_text())
-    except (json.JSONDecodeError, IOError):
-        return None
+    """Load pipeline state for a specific project, searching all registered dirs."""
+    for d in _get_all_project_dirs(projects_dir):
+        state_file = d / project_name / '.pipeline-state.json'
+        if state_file.exists():
+            try:
+                return json.loads(state_file.read_text())
+            except (json.JSONDecodeError, IOError):
+                return None
+    return None
 
 
 def load_all_pipelines(projects_dir: Path) -> dict:
-    """Load pipeline states for all projects that have them."""
+    """Load pipeline states for all projects across all registered dirs."""
     pipelines = {}
-    if not projects_dir.exists():
-        return pipelines
-    for item in projects_dir.iterdir():
-        if item.is_dir() and not item.name.startswith('.'):
-            state = load_pipeline_state(projects_dir, item.name)
-            if state:
-                pipelines[item.name] = state
+    for d in _get_all_project_dirs(projects_dir):
+        if not d.exists():
+            continue
+        for item in d.iterdir():
+            if item.is_dir() and not item.name.startswith('.'):
+                if item.name in pipelines:
+                    continue
+                state_file = item / '.pipeline-state.json'
+                if state_file.exists():
+                    try:
+                        pipelines[item.name] = json.loads(state_file.read_text())
+                    except (json.JSONDecodeError, IOError):
+                        pass
     return pipelines
 
 

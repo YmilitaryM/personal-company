@@ -47,6 +47,28 @@ REVIEW_DIR_TEMPLATE = 'reviews'
 SAFE_NAME_RE = re.compile(r'^[a-zA-Z0-9_\-.]+$')
 
 
+# --- Auto-register project dir for the web dashboard ---
+REGISTRY_FILE = Path.home() / '.ai-dev-team' / 'project-dirs'
+
+def _register_project_dir():
+    """Write the current PROJECT_DIR to a registry file so the web dashboard
+    can discover projects across all directories where Claude Code was started."""
+    try:
+        registry_dir = REGISTRY_FILE.parent
+        registry_dir.mkdir(parents=True, exist_ok=True)
+        cwd = str(PROJECT_DIR.resolve())
+        existing = set()
+        if REGISTRY_FILE.exists():
+            existing = set(line.strip() for line in REGISTRY_FILE.read_text().splitlines() if line.strip())
+        if cwd not in existing:
+            with open(REGISTRY_FILE, 'a') as f:
+                f.write(cwd + '\n')
+    except Exception:
+        pass  # Never block startup for registry writes
+
+_register_project_dir()
+
+
 def _validate_project_name(name: str) -> bool:
     """Validate that a project name is safe (no path traversal)."""
     if name in ('.', '..'):
