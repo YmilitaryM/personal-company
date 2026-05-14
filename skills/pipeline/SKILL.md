@@ -102,7 +102,7 @@ Project names must match `^[a-zA-Z0-9][-a-zA-Z0-9_]*$`.
 1. Read `projects/<project>/.pipeline-state.json`
    - If exists and `current_phase` is not `delivery` (done) → pipeline already running. Show status.
    - If `delivery` phase is `done` → project completed. Ask if restart.
-2. Check project has templates. If `projects/<project>/prd.md` doesn't exist, run `python3 scripts/init_project.py <project>`.
+2. Check project has templates. If `projects/<project>/prd.md` doesn't exist, run `python3 $CLAUDE_PROJECT_DIR/scripts/init_project.py <project>`.
 3. Read `config/tech-standards.json` for architecture reference.
 4. Write initial state: all phases `pending`, `decisions` empty array, `review_queue` empty array, `current_phase` = `intake`, `pipeline_version` = `2.0`, `started_at` = now.
 
