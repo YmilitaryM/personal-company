@@ -592,6 +592,27 @@ button.danger { background: var(--red); }
 .gateway-info .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .gateway-info .status.on { background: var(--green); }
 .gateway-info .status.off { background: var(--red); }
+.api-keys-section { margin-top: 24px; }
+.api-keys-section .description { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+.api-keys-section .description code { background: var(--bg); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+.key-row { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); gap: 12px; }
+.key-row:last-child { border-bottom: none; }
+.key-row .key-info { width: 180px; }
+.key-row .key-name { font-size: 13px; font-weight: 600; font-family: monospace; }
+.key-row .key-provider { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.key-row .key-value { flex: 1; font-size: 12px; font-family: monospace; color: var(--text-muted); }
+.key-row .key-value.set { color: var(--green); }
+.key-row .key-status { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+.key-row .key-status.set { background: #1a3a2a; color: var(--green); }
+.key-row .key-status.missing { background: #3a2a1a; color: var(--yellow); }
+.key-row .key-actions button { font-size: 11px; padding: 3px 12px; border-radius: 4px; cursor: pointer; background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.key-row .key-actions button:hover { border-color: var(--accent); color: var(--accent); }
+.key-row .key-actions button.save { background: var(--accent); color: #fff; border-color: var(--accent); }
+.key-row .key-actions button.cancel { background: none; border: none; color: var(--text-muted); }
+.key-row input { flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--accent); padding: 5px 10px; border-radius: 4px; font-size: 12px; font-family: monospace; }
+.key-row input:focus { outline: none; }
+.restart-hint { margin-top: 14px; padding: 10px 14px; background: #1c2838; border-radius: 6px; font-size: 12px; color: var(--accent); display: none; }
+.restart-hint.visible { display: block; }
 </style>
 </head>
 <body>
@@ -612,6 +633,19 @@ button.danger { background: var(--red); }
   <button onclick="saveConfig()">Save Config</button>
   <button class="secondary" onclick="syncModels()">Sync to Agents</button>
 </div>
+
+	<div class="restart-hint" id="restart-hint">
+	  Keys saved. Restart the gateway (<code>bash scripts/start.sh</code>) to apply changes.
+	</div>
+
+	<div class="section-title" style="margin-top:24px;">API Keys</div>
+	<div class="api-keys-section">
+	  <div class="description">
+	    Configure API keys for each model provider. Keys are stored in <code>.env</code> and read by the LiteLLM gateway.
+	    Empty keys will be commented out.
+	  </div>
+	  <div class="config-form" id="api-keys-form"></div>
+	</div>
 
 <div class="gateway-info">
   <h4>Gateway Status</h4>
@@ -671,6 +705,12 @@ async function loadConfig() {
         '</div></div>';
     }
     form.innerHTML = html;
+    // Attach click handlers for edit buttons
+    form.querySelectorAll('.edit-key-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        editKey(this.getAttribute('data-key'));
+      });
+    });
     configLoaded = true;
   } catch (e) {
     form.innerHTML = '<div style="padding:20px;color:var(--red);text-align:center">' +
@@ -733,6 +773,100 @@ async function syncModels() {
   }
 }
 
+// ── API Keys management ──
+const API_KEY_LABELS = {
+  'ANTHROPIC_API_KEY': 'Anthropic Claude',
+  'DEEPSEEK_API_KEY': 'DeepSeek',
+  'OPENAI_API_KEY': 'OpenAI',
+  'DASHSCOPE_API_KEY': 'Qwen (通义千问)',
+  'LITELLM_MASTER_KEY': 'LiteLLM Admin',
+};
+
+async function loadApiKeys() {
+  const form = document.getElementById('api-keys-form');
+  form.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">Loading...</div>';
+  try {
+    const resp = await fetch('/api/env');
+    if (!resp.ok) throw new Error('Server returned ' + resp.status);
+    const data = await resp.json();
+    const keys = data.keys || {};
+
+    let html = '';
+    for (const [key, label] of Object.entries(API_KEY_LABELS)) {
+      const info = keys[key] || {value: '', set: false};
+      const masked = info.value || (info.set ? '***' : '');
+      const statusCls = info.set ? 'set' : 'missing';
+      const statusText = info.set ? 'Set' : 'Missing';
+      html += '<div class="key-row" id="key-row-' + escapeHtml(key) + '">' +
+        '<div class="key-info"><div class="key-name">' + escapeHtml(key) + '</div><div class="key-provider">' + escapeHtml(label) + '</div></div>' +
+        '<span class="key-value ' + statusCls + '" id="key-val-' + escapeHtml(key) + '">' + (masked || '—') + '</span>' +
+        '<span class="key-status ' + statusCls + '" id="key-badge-' + escapeHtml(key) + '">' + statusText + '</span>' +
+        '<span class="key-actions"><button data-key="' + escapeHtml(key) + '" class="edit-key-btn">Edit</button></span>' +
+        '</div>';
+    }
+    form.innerHTML = html;
+    // Attach click handlers for edit buttons
+    form.querySelectorAll('.edit-key-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        editKey(this.getAttribute('data-key'));
+      });
+    });
+  } catch (e) {
+    form.innerHTML = '<div style="padding:12px;color:var(--red);text-align:center;font-size:13px;">' +
+      'Failed to load API keys: ' + escapeHtml(e.message) +
+      '<br><button onclick="loadApiKeys()" style="margin-top:6px;font-size:11px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:4px;cursor:pointer;">Retry</button>' +
+      '</div>';
+  }
+}
+
+function editKey(key) {
+  const row = document.getElementById('key-row-' + key);
+  const valEl = document.getElementById('key-val-' + key);
+  const badgeEl = document.getElementById('key-badge-' + key);
+  const currentVal = valEl.textContent === '—' ? '' : valEl.textContent;
+  row.innerHTML = '<div class="key-info"><div class="key-name">' + escapeHtml(key) + '</div><div class="key-provider">' + escapeHtml(API_KEY_LABELS[key] || '') + '</div></div>' +
+    '<input type="text" id="edit-' + escapeHtml(key) + '" value="" placeholder="Enter API key...">' +
+    '<span class="key-actions">' +
+    '<button class="save save-key-btn" data-key="' + escapeHtml(key) + '">Save</button>' +
+    '<button class="cancel cancel-edit-btn" data-key="' + escapeHtml(key) + '">Cancel</button>' +
+    '</span>';
+  document.getElementById('edit-' + key).focus();
+  // Attach save/cancel handlers
+  row.querySelector('.save-key-btn').addEventListener('click', function() {
+    saveKey(this.getAttribute('data-key'));
+  });
+  row.querySelector('.cancel-edit-btn').addEventListener('click', function() {
+    cancelEdit(this.getAttribute('data-key'));
+  });
+}
+
+async function saveKey(key) {
+  const input = document.getElementById('edit-' + key);
+  const value = input ? input.value.trim() : '';
+  try {
+    const payload = {};
+    payload[key] = value;
+    const resp = await fetch('/api/env', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({keys: payload})
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      document.getElementById('restart-hint').className = 'restart-hint visible';
+      loadApiKeys();
+    } else {
+      showAlert('Error: ' + (data.error || 'unknown'), 'error');
+    }
+  } catch (e) {
+    showAlert('Failed to save: ' + e.message, 'error');
+  }
+}
+
+function cancelEdit(key) {
+  loadApiKeys();
+}
+
 // Check gateway health
 async function checkGateway() {
   try {
@@ -748,6 +882,7 @@ async function checkGateway() {
 }
 
 loadConfig();
+loadApiKeys();
 checkGateway();
 </script>
 </body>
@@ -863,6 +998,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send_json({'error': 'models.json not found'}, 404)
             return
 
+        if path == '/api/env':
+            env_file = Path(self.project_root) / '.env'
+            template_keys = self._env_keys_template()
+            current = self._parse_env_file(env_file)
+            keys_out = {}
+            for key in template_keys:
+                val = current.get(key, '')
+                keys_out[key] = {
+                    'value': self._mask_key(val),
+                    'set': bool(val),
+                }
+            self._send_json({'keys': keys_out, 'masked': True})
+            return
+
         if path == '/config':
             self._send_html(self._config_page())
             return
@@ -887,6 +1036,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if path == '/api/models/sync':
             self._handle_sync_models()
+            return
+
+        if path == '/api/env':
+            self._handle_save_env(data)
             return
 
         self._send_json({'error': 'Not found'}, 404)
@@ -914,6 +1067,86 @@ class DashboardHandler(BaseHTTPRequestHandler):
         for m in re.finditer(r'model_name:\s*(\S+)', content):
             models.append(m.group(1))
         return [{'model_name': n} for n in models]
+
+    def _parse_env_file(self, path):
+        """Parse .env file returning dict of key-value pairs."""
+        result = {}
+        if not path.exists():
+            return result
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, _, value = line.partition('=')
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            result[key] = value
+        return result
+
+    def _write_env_file(self, path, updates):
+        """Write updated keys to .env, preserving existing structure.
+        If .env doesn't exist, generate from .env.example template."""
+        template = Path(self.project_root) / 'config' / '.env.example'
+        if path.exists():
+            lines = path.read_text().splitlines()
+            updated_keys = set()
+            new_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped and not stripped.startswith('#') and '=' in stripped:
+                    key = stripped.split('=', 1)[0].strip()
+                    if key in updates:
+                        new_lines.append(f'{key}={updates[key]}')
+                        updated_keys.add(key)
+                    else:
+                        new_lines.append(line)
+                else:
+                    new_lines.append(line)
+            # Add new keys not in file
+            for key, value in updates.items():
+                if key not in updated_keys and value:
+                    new_lines.append(f'{key}={value}')
+            path.write_text('\n'.join(new_lines) + '\n')
+        else:
+            # Generate from template
+            if template.exists():
+                lines = template.read_text().splitlines()
+                new_lines = []
+                for line in lines:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith('#') and '=' in stripped:
+                        key = stripped.split('=', 1)[0].strip()
+                        if key in updates and updates[key]:
+                            new_lines.append(f'{key}={updates[key]}')
+                        elif key in updates:
+                            new_lines.append(f'#{key}=')
+                        else:
+                            new_lines.append(line)
+                    else:
+                        new_lines.append(line)
+                path.write_text('\n'.join(new_lines) + '\n')
+            else:
+                # No template, just write keys
+                path.write_text('\n'.join(f'{k}={v}' for k, v in updates.items() if v) + '\n')
+
+    def _env_keys_template(self):
+        """Return the set of expected API key names from .env.example."""
+        template = Path(self.project_root) / 'config' / '.env.example'
+        if not template.exists():
+            return ['ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY', 'OPENAI_API_KEY',
+                    'DASHSCOPE_API_KEY', 'LITELLM_MASTER_KEY']
+        keys = []
+        for line in template.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                keys.append(line.split('=', 1)[0].strip())
+        return keys
+
+    def _mask_key(self, value):
+        """Mask an API key: show first 6 + *** + last 4."""
+        if not value or len(value) < 10:
+            return value[:3] + '***' if value else ''
+        return value[:6] + '***' + value[-4:]
 
     def _handle_save_models(self, data):
         """Save model assignments to models.json."""
@@ -944,6 +1177,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_json({'error': f'Python not found at {sys.executable}'}, 500)
         except subprocess.TimeoutExpired:
             self._send_json({'error': 'Sync timed out after 15s'}, 500)
+        except Exception as e:
+            self._send_json({'error': str(e)}, 500)
+
+    def _handle_save_env(self, data):
+        """Save API keys to .env file."""
+        keys = data.get('keys', {})
+        if not keys:
+            self._send_json({'error': 'Missing keys data'}, 400)
+            return
+        try:
+            env_file = Path(self.project_root) / '.env'
+            self._write_env_file(env_file, keys)
+            self._send_json({
+                'ok': True,
+                'message': f'Saved {len(keys)} key(s). Restart the gateway (bash scripts/start.sh) to apply changes.'
+            })
         except Exception as e:
             self._send_json({'error': str(e)}, 500)
 
