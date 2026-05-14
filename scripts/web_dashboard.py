@@ -273,6 +273,7 @@ footer { text-align: center; padding: 16px; color: var(--text-muted); font-size:
 <header>
   <h1>AI Dev Team <span>Dashboard</span></h1>
   <nav>
+	    <a href="/config" style="color:var(--text-muted);text-decoration:none;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;margin-left:4px;">Config</a>
     <button onclick="showCompany()" id="nav-company">Company</button>
     <button onclick="showDepartment('AI/ML')" id="nav-aiml">AI/ML</button>
     <button onclick="showDepartment('IoT')" id="nav-iot">IoT</button>
@@ -517,7 +518,7 @@ function projectCard(p) {
   if (hasPipeline) {
     const ps = pipelineData[p.name];
     const doneCount = Object.values(ps.phases || {}).filter(ph => ph.status === 'done').length;
-    pipeHtml = '<div class="pipeline-bar">Pipeline: Phase ' + doneCount + '/7 · ' + escapeHtml(ps.current_phase || '') + '</div>';
+    pipeHtml = '<div class="pipeline-bar">Pipeline: Phase ' + doneCount + '/8 · ' + escapeHtml(ps.current_phase || '') + '</div>';
   }
   return '<div class="project-card" onclick="showProject(\'' + escapeHtml(p.name).replace(/'/g, '&#39;') + '\')">' +
     '<div class="card-header"><h3>' + escapeHtml(p.name) + '</h3><span class="direction-tag">' + escapeHtml(p.direction || '—') + '</span></div>' +
@@ -597,6 +598,7 @@ button.danger { background: var(--red); }
 <header>
   <h1>Model <span>Config</span></h1>
   <nav>
+	    <a href="/config" style="color:var(--text-muted);text-decoration:none;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;margin-left:4px;">Config</a>
     <a href="/">← Dashboard</a>
   </nav>
 </header>
@@ -624,14 +626,14 @@ button.danger { background: var(--red); }
 
 <script>
 const ROLE_DESCRIPTIONS = {
-  'cto': 'CTO — 技术战略',
+  'cto': 'CTO — 立项审批、架构审批、僵局仲裁、交付签署',
   'architect': 'Architect — 架构治理',
   'pm': 'PM — 产品需求',
-  'tech-lead': 'Tech Lead — 技术方案',
+  'tech-lead': 'Tech Lead — 组建团队、任务分配、后台代码审查',
   'designer': 'Designer — UI/UX',
-  'reviewer-r1': 'R1 评审员 — 架构',
-  'reviewer-r2': 'R2 评审员 — 产品',
-  'reviewer-r3': 'R3 评审员 — 工程',
+  'reviewer-r1': 'R1 评审员 — 架构专家（3轮辩论式）',
+  'reviewer-r2': 'R2 评审员 — 产品质量专家（3轮辩论式）',
+  'reviewer-r3': 'R3 评审员 — 工程效率专家（3轮辩论式）',
   'senior-engineer': 'Senior Engineer — 开发',
   'devops': 'DevOps — CI/CD',
   'market-manager': 'Market — 市场调研',
