@@ -69,6 +69,7 @@ claude plugin install --scope user ~/ai-dev-team
 /pipeline      → 全流程自动化
 /market        → 市场情报
 /devops        → CI/CD 管道
+/tdd           → 测试驱动开发
 ```
 
 或者直接执行 `/dashboard company` 测试。
@@ -100,7 +101,9 @@ claude plugin install --scope user ~/ai-dev-team
 | `/tech-lead <project>` | Tech Lead | 技术方案设计、任务分解 |
 | `/designer ui <project>` | 设计师 | UI/UX 设计（内置 Figma MCP 直接画图） |
 | `/devops ci <project>` | DevOps | CI/CD 流水线生成 |
+| `/tdd <task>` | TDD 工程师 | Red-Green-Refactor 测试驱动开发（基于现有工程师） |
 | `/market <topic>` | 市场经理 | 市场分析、竞品情报 |
+| `/tdd <task>` | TDD 工程师 | 测试驱动开发（Red-Green-Refactor） |
 
 ### 模型配置
 
@@ -293,7 +296,7 @@ DG4 (待交付)       → ≥8.0/10  部署、文档、验收标准
 
 ## 插件能力一览
 
-- **11 个 Slash 命令** — 按角色调用 + 全流程自动流水线
+- **12 个 Slash 命令** — 按角色调用 + 全流程自动流水线 + TDD
 - **11 个 Agent 角色** — 含 3 个独立 Reviewer（context: fork 并行）
 - **27 个 MCP 工具** — 项目/任务/评审/Sprint/会议/知识库/报表/交接/Git
 - **7 阶段自动流水线** — 一键 `/pipeline start` 从立项到交付，支持断点恢复

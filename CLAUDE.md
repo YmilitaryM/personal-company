@@ -36,7 +36,7 @@ claude plugin install --scope user .
 
 | Component | Path | What It Does |
 |-----------|------|--------------|
-| **11 Skills** | `skills/` | Slash commands: `/cto` `/pm` `/tech-lead` `/architect` `/designer` `/review` `/dashboard` `/project` `/pipeline` `/market` `/devops` |
+| **12 Skills** | `skills/` | Slash commands: `/cto` `/pm` `/tech-lead` `/architect` `/designer` `/review` `/dashboard` `/project` `/pipeline` `/market` `/devops` `/tdd` |
 | **11 Agents** | `agents/` | Subagent definitions: cto, pm, tech-lead, senior-engineer, domain-engineer, designer (×1), reviewer-r1/r2/r3, devops, market-manager |
 | **MCP Server** | `mcp-server/` | 27 tools: project CRUD, tasks, reviews, sprints, meetings, knowledge base, reports, dashboard, handoffs, git |
 | **Hooks** | `hooks/` | Quality gates, analytics alerts, auto-collection, session init |
@@ -61,6 +61,7 @@ claude plugin install --scope user .
 | `/architect <standards\|review\|adr>` | Technology standards governance, pre-DG1 architecture review |
 | `/pm <direction>` | Product requirements analysis |
 | `/devops ci <project>` | Set up CI/CD pipeline for project |
+| `/tdd <task_id>` | Test-Driven Development — Red-Green-Refactor cycle for any task |
 
 ## AI Team Workflow
 

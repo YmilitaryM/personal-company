@@ -212,6 +212,7 @@ Your job:
 1. Review the PRD against config/tech-standards.json
 2. Produce an Architecture Compliance Report in projects/<name>/architecture-review.md:
    - Compliance matrix: each tech choice → standard or exception
+   - TDD requirements: test framework, test directory structure, coverage targets
    - Issues found, with severity (blocker/warning/suggestion)
    - Remediation steps for each issue
    - If a non-standard technology is justified, write a brief ADR (Architecture Decision Record)
@@ -286,22 +287,38 @@ Context:
 - Tech Spec: projects/<name>/tech-spec.md
 - Architecture Review: projects/<name>/architecture-review.md
 
-Your job:
-1. Read the tech spec and architecture review for context
-2. Create a git branch for this task: use mcp__ai-team-db__git_create_branch
-3. Implement the task according to the description and acceptance criteria
-4. Write clean, well-structured, production-ready code
-5. Verify your implementation against the acceptance criteria
-6. Commit your changes: use mcp__ai-team-db__git_commit with a descriptive message
-7. Merge back: notify TL (via mcp__ai-team-db__git_merge_branch)
+Your job — follow TDD (Red-Green-Refactor) strictly:
+
+🔴 RED — Write failing tests FIRST:
+1. Create a git branch: use mcp__ai-team-db__git_create_branch
+2. Write unit tests, edge case tests, and acceptance tests BEFORE any implementation
+3. Map each acceptance criterion to at least one test (GIVEN/WHEN/THEN)
+4. Run tests — they MUST fail (confirming they test new behavior)
+
+🟢 GREEN — Minimum implementation:
+5. Write the minimum code to make ALL tests pass
+6. No extra features beyond what the tests demand
+7. Run tests after each change — keep feedback under 2 minutes
+8. Commit: git commit -m "feat(<task_id>): <description> — tests pass"
+
+🔵 REFACTOR — Improve while green:
+9. Extract duplicates, improve names, simplify logic
+10. Run tests after EVERY refactoring step — stay green
+11. Verify ≥80% test coverage on new code
+
+Before returning:
+12. Run the FULL test suite (not just new tests) — all must pass
+13. Verify every acceptance criterion has a corresponding passing test
+14. Merge: use mcp__ai-team-db__git_merge_branch
 
 Important: 
+- Never write implementation before tests — this is a TDD pipeline
 - Stay within scope — only implement what the task describes
-- If you discover the task is too large, note it and implement the core part
+- If the task is too large, split it and TDD each sub-task
 - Do NOT modify files outside the task scope
-- If the task depends on another task that isn't done yet, note the dependency and implement against the expected interface
+- Report: tests written (count), coverage estimate, any skipped edge cases
 
-Return: what you implemented, files changed, any issues encountered.
+Return: what you implemented, tests written, test results, files changed.
 ```
 
 Wait for each engineer to complete. After each task:
@@ -339,9 +356,9 @@ Each receives:
 - Project: <name>
 - Context: read projects/<name>/prd.md, tech-spec.md, tasks.md, and all previous review records
 
-For DG1: review architecture, UX design, task decomposition
-For DG2: review code quality, design fidelity, test coverage
-For DG3: review performance, security, bug rate
+For DG1: review architecture, UX design, task decomposition, TDD test plan exists
+For DG2: review code quality, design fidelity, TDD compliance (tests before implementation?), test coverage ≥80%
+For DG3: review performance, security, bug rate, regression test coverage
 For DG4: review deployment readiness, documentation, acceptance criteria compliance
 
 Each reviewer returns JSON:
