@@ -548,9 +548,10 @@ function renderCompany() {
     html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">';
     activePipe.forEach(name => {
       const ps = pipelineData[name];
-      const phase = ps ? Object.entries(ps.phases || {}).filter(([k,v]) => v.status==='done').length : 0;
+      const phases = ps ? Object.entries(ps.phases || {}) : [];
+      const done = phases.filter(([k,v]) => v.status==='done').length;
       html += '<span style="background:#1c2838;padding:4px 12px;border-radius:12px;font-size:12px;color:var(--accent)">' +
-        escapeHtml(name) + ' · Phase ' + phase + '/8</span>';
+        escapeHtml(name) + ' · Phase ' + done + '/' + phases.length + '</span>';
     });
     html += '</div>';
   }
