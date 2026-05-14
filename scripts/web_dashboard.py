@@ -193,6 +193,49 @@ def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_proje
             }
 
 
+def _merge_pipeline_state(all_projects: dict, all_dirs: list[Path]):
+    """Merge .pipeline-state.json fields into project data for projects in both sources.
+
+    Pipeline state is the authoritative source for current phase, overall progress,
+    and status — it's updated by the pipeline orchestrator on every phase transition.
+    .index.json may lag because it's only updated via explicit MCP tool calls.
+    """
+    for d in all_dirs:
+        if not d.exists():
+            continue
+        for item in d.iterdir():
+            if not item.is_dir() or item.name.startswith('.'):
+                continue
+            pname = item.name
+            if pname not in all_projects:
+                continue
+            pipe_file = item / '.pipeline-state.json'
+            if not pipe_file.exists():
+                continue
+            try:
+                pipe = json.loads(pipe_file.read_text())
+            except (json.JSONDecodeError, IOError):
+                continue
+
+            pdata = all_projects[pname]
+            # Pipeline current_phase is authoritative
+            if pipe.get('current_phase'):
+                pdata['phase'] = pipe['current_phase']
+            # Pipeline overall_progress is authoritative (calculated from phases)
+            pipe_progress = pipe.get('overall_progress') or _calc_progress(pipe)
+            if pipe_progress is not None:
+                pdata['overall_progress'] = pipe_progress
+            # Pipeline status is authoritative
+            if pipe.get('status'):
+                pdata['status'] = pipe['status']
+            # Sync target date
+            if pipe.get('target_date') and not pdata.get('target_date'):
+                pdata['target_date'] = pipe['target_date']
+            # Sync blockers from pipeline if index has none
+            if pipe.get('blockers') and not pdata.get('blockers'):
+                pdata['blockers'] = pipe['blockers']
+
+
 def load_dashboard_data(projects_dir: Path) -> dict:
     """Load aggregated dashboard data from .index.json across all registered dirs."""
     all_dirs = _get_all_project_dirs(projects_dir)
@@ -228,6 +271,11 @@ def load_dashboard_data(projects_dir: Path) -> dict:
         _scan_dir_for_projects(d, extra_projects, index_project_names)
 
     all_projects = {**extra_projects, **all_index_projects}
+
+    # Merge pipeline state into project data so dashboard reflects latest pipeline progress
+    # Pipeline state is more authoritative for phase/progress/status than .index.json
+    _merge_pipeline_state(all_projects, all_dirs)
+
     projects = []
     for pname, pdata in all_projects.items():
         tasks = pdata.get('tasks', [])
