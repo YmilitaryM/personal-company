@@ -12,6 +12,7 @@ import re
 import argparse
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs
@@ -50,6 +51,40 @@ def _get_all_project_dirs(base_dir: Path) -> list[Path]:
     return dirs
 
 
+def _infer_direction(pipe: dict) -> str:
+    """Try to infer product direction from pipeline decisions (TL/PM assignment)."""
+    if pipe.get('product_direction'):
+        return pipe['product_direction']
+    for d in pipe.get('decisions', []):
+        text = d.get('decision', '') + d.get('context', '')
+        if 'TL-C' in text or 'PM-C' in text or 'App&Web' in text:
+            return 'App&Web'
+        if 'TL-A' in text or 'PM-A' in text or 'AI/ML' in text:
+            return 'AI/ML'
+        if 'TL-B' in text or 'PM-B' in text or 'IoT' in text:
+            return 'IoT'
+    return 'General'
+
+
+def _infer_tech_lead(pipe: dict) -> Optional[str]:
+    """Try to infer tech lead from pipeline planning decision."""
+    for d in pipe.get('decisions', []):
+        text = d.get('decision', '')
+        if 'TL-C' in text: return 'TL-C (App&Web)'
+        if 'TL-A' in text: return 'TL-A (AI/ML)'
+        if 'TL-B' in text: return 'TL-B (IoT)'
+    return None
+
+
+def _calc_progress(pipe: dict) -> int:
+    """Calculate overall progress from pipeline phases."""
+    phases = pipe.get('phases', {})
+    if not phases:
+        return 0
+    done = sum(1 for p in phases.values() if isinstance(p, dict) and p.get('status') == 'done')
+    return round(done / len(phases) * 100)
+
+
 def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_project_names: set):
     """Scan a single projects_dir for directories with .pipeline-state.json not in index."""
     if not projects_dir.exists():
@@ -66,10 +101,10 @@ def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_proje
             except (json.JSONDecodeError, IOError):
                 pipe = {}
             extra_projects[item.name] = {
-                'direction': pipe.get('product_direction', 'Unknown'),
-                'tech_lead': pipe.get('tech_lead', 'Unassigned'),
+                'direction': _infer_direction(pipe),
+                'tech_lead': pipe.get('tech_lead') or _infer_tech_lead(pipe) or 'Unassigned',
                 'phase': pipe.get('current_phase', 'Unknown'),
-                'overall_progress': pipe.get('overall_progress', 0),
+                'overall_progress': pipe.get('overall_progress') or _calc_progress(pipe),
                 'status': pipe.get('status', 'ok'),
                 'blockers': pipe.get('blockers', []),
                 'tasks': [],
@@ -370,9 +405,11 @@ let pipelineData = null;
 
 async function fetchData() {
   try {
-    const dashResp = await fetch('/api/dashboard?level=' + currentView +
-      (currentDept ? '&name=' + encodeURIComponent(currentDept) : '') +
-      (currentProject ? '&name=' + encodeURIComponent(currentProject) : ''));
+    // For project detail view, always fetch company-level data
+    // and filter client-side (avoids response format mismatch)
+    const level = currentProject ? 'company' : currentView;
+    const nameParam = (currentProject || !currentDept) ? '' : '&name=' + encodeURIComponent(currentDept);
+    const dashResp = await fetch('/api/dashboard?level=' + level + nameParam);
     dashboardData = await dashResp.json();
     const pipeResp = await fetch('/api/pipelines');
     pipelineData = await pipeResp.json();
