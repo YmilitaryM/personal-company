@@ -26,6 +26,16 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 _VALID_NAME_RE = re.compile(r'^[a-zA-Z0-9][-a-zA-Z0-9_]*$')
 
 
+def _is_status(status: str, check: str) -> bool:
+    """Check if a Chinese status field indicates risk or delay."""
+    s = status.lower()
+    if check == 'risk':
+        return any(kw in s for kw in ['风险', '严重', '🔴', 'risk', '高危', 'blocker'])
+    elif check == 'delay':
+        return any(kw in s for kw in ['延迟', '延期', 'delay', '超期', '逾期', '严重'])
+    return False
+
+
 def load_dashboard_data(projects_dir: Path) -> dict:
     """Load aggregated dashboard data from .index.json, same pattern as collect-dashboard.py."""
     index_file = projects_dir / '.index.json'
@@ -94,8 +104,8 @@ def load_dashboard_data(projects_dir: Path) -> dict:
         'total_projects': len(projects),
         'active_projects': len([p for p in projects if p.get('overall_progress', 0) < 100]),
         'total_blockers': sum(len(p.get('blockers', [])) for p in projects),
-        'at_risk': [p['name'] for p in projects if 'risk' in p.get('status', '').lower() or '🔴' in p.get('status', '')],
-        'delayed': [p['name'] for p in projects if 'delay' in p.get('status', '').lower()],
+        'at_risk': [p['name'] for p in projects if _is_status(p.get('status', ''), 'risk')],
+        'delayed': [p['name'] for p in projects if _is_status(p.get('status', ''), 'delay')],
         'avg_progress': round(sum(p.get('overall_progress', 0) for p in projects) / max(len(projects), 1), 1),
         'total_tasks_done': sum(p.get('tasks', {}).get('done', 0) for p in projects),
         'total_tasks': sum(sum(p.get('tasks', {}).values()) for p in projects),
@@ -896,10 +906,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
         sync_script = Path(self.project_root) / 'scripts' / 'sync-models.py'
         try:
             result = subprocess.run(
-                ['python3.14', str(sync_script)],
-                capture_output=True, text=True, timeout=15
+                [sys.executable, str(sync_script)],
+                capture_output=True, text=True, timeout=15, cwd=str(self.project_root)
             )
-            self._send_json({'ok': True, 'output': result.stdout.strip()})
+            self._send_json({'ok': True, 'output': result.stdout.strip() or 'Synced successfully'})
+        except FileNotFoundError:
+            self._send_json({'error': f'Python not found at {sys.executable}'}, 500)
+        except subprocess.TimeoutExpired:
+            self._send_json({'error': 'Sync timed out after 15s'}, 500)
         except Exception as e:
             self._send_json({'error': str(e)}, 500)
 

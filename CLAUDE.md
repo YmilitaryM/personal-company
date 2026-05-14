@@ -38,7 +38,7 @@ claude plugin install --scope user .
 |-----------|------|--------------|
 | **11 Skills** | `skills/` | Slash commands: `/cto` `/pm` `/tech-lead` `/designer` `/review` `/dashboard` `/project` `/pipeline` `/market` `/devops` |
 | **10 Agents** | `agents/` | Subagent definitions: cto, pm, tech-lead, senior-engineer, designer (×1), reviewer-r1/r2/r3, devops, market-manager |
-| **MCP Server** | `mcp-server/` | 23 tools: project CRUD, tasks, reviews, sprints, meetings, knowledge base, reports, dashboard, handoffs |
+| **MCP Server** | `mcp-server/` | 27 tools: project CRUD, tasks, reviews, sprints, meetings, knowledge base, reports, dashboard, handoffs, git |
 | **Hooks** | `hooks/` | Quality gates, analytics alerts, auto-collection, session init |
 | **Monitors** | `monitors/` | Dashboard refresh, deadline tracking |
 | **Analytics** | `scripts/` | Velocity, quality, cycle time metrics + predictive alerts |
