@@ -72,15 +72,21 @@ echo "└───────────────────────�
 echo ""
 
 echo "→ Model Gateway (port $GW_PORT)"
-"$PYTHON" "$PROJECT_DIR/scripts/model-gateway.py" --port "$GW_PORT" &
-GW_PID=$!
-sleep 1
+if python3 -c "import litellm" 2>/dev/null; then
+  "$PYTHON" "$PROJECT_DIR/scripts/model-gateway.py" --port "$GW_PORT" &
+  GW_PID=$!
+  sleep 1
 
-if ! kill -0 "$GW_PID" 2>/dev/null; then
-  echo "  ✗ Gateway failed to start"
-  exit 1
+  if ! kill -0 "$GW_PID" 2>/dev/null; then
+    echo "  ⚠ Gateway failed to start (continuing without it)"
+    GW_PID=""
+  else
+    echo "  ✓ Gateway ready"
+  fi
+else
+  echo "  ⚠ LiteLLM not installed — skipping gateway (pip install litellm)"
+  GW_PID=""
 fi
-echo "  ✓ Gateway ready"
 
 # ── Start Web Dashboard ──
 echo "→ Web Dashboard (port $WEB_PORT)"
@@ -101,7 +107,9 @@ echo "│  Services Running                        │"
 echo "├─────────────────────────────────────────┤"
 echo "│  Dashboard:  http://localhost:$WEB_PORT       │"
 echo "│  Model Config: http://localhost:$WEB_PORT/config │"
-echo "│  Gateway API: http://localhost:$GW_PORT       │"
+if [ -n "$GW_PID" ]; then
+  echo "│  Gateway API: http://localhost:$GW_PORT       │"
+fi
 echo "│                                          │"
 echo "│  Claude Code env:                        │"
 echo "│  ANTHROPIC_BASE_URL=http://localhost:$GW_PORT │"
