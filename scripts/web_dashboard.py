@@ -642,6 +642,7 @@ const ROLE_DESCRIPTIONS = {
 
 async function loadConfig() {
   const form = document.getElementById('config-form');
+  form.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">Loading model configuration...</div>';
   try {
     const resp = await fetch('/api/models');
     if (!resp.ok) throw new Error('Server returned ' + resp.status);
@@ -663,10 +664,12 @@ async function loadConfig() {
         '</div></div>';
     }
     form.innerHTML = html;
+    configLoaded = true;
   } catch (e) {
     form.innerHTML = '<div style="padding:20px;color:var(--red);text-align:center">' +
       'Failed to load config: ' + escapeHtml(e.message) + '<br>' +
-      '<span style="font-size:12px;color:var(--text-muted)">Is web_dashboard.py running? Check that config/models.json exists.</span>' +
+      '<span style="font-size:12px;color:var(--text-muted)">Is web_dashboard.py running? Check that config/models.json exists.</span><br>' +
+      '<button onclick="loadConfig()" style="margin-top:10px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;">Retry</button>' +
       '</div>';
   }
 }
@@ -685,7 +688,12 @@ function showAlert(msg, type) {
   setTimeout(() => { el.className = 'alert'; }, 4000);
 }
 
+let configLoaded = false;
 async function saveConfig() {
+  if (!configLoaded) {
+    showAlert('Please wait for the form to load before saving.', 'error');
+    return;
+  }
   const roles = {};
   for (const role of Object.keys(ROLE_DESCRIPTIONS)) {
     const input = document.getElementById('role-' + role);
