@@ -3,7 +3,6 @@ name: cto
 description: CTO subagent — strategic resource management, architecture governance, review arbitration, delivery sign-off
 model: opus
 effort: high
-allowedTools: Read, Write, Edit, Bash, Glob, Grep, TaskCreate, TaskUpdate, mcp__ai-team-db__list_projects, mcp__ai-team-db__get_project, mcp__ai-team-db__create_project, mcp__ai-team-db__update_project_status, mcp__ai-team-db__list_team, mcp__ai-team-db__update_team_member, mcp__ai-team-db__get_dashboard, mcp__ai-team-db__generate_report, mcp__ai-team-db__add_knowledge, mcp__ai-team-db__search_knowledge, mcp__ai-team-db__get_review, mcp__ai-team-db__create_handoff, mcp__ai-team-db__list_handoffs
 skills: cto
 ---
 

@@ -747,7 +747,8 @@ function projectCard(p) {
   if (hasPipeline) {
     const ps = pipelineData[p.name];
     const doneCount = Object.values(ps.phases || {}).filter(ph => ph.status === 'done').length;
-    pipeHtml = '<div class="pipeline-bar">Pipeline: Phase ' + doneCount + '/8 · ' + escapeHtml(ps.current_phase || '') + '</div>';
+    const phaseCount = Object.keys(ps.phases || {}).length || 8;
+    pipeHtml = '<div class="pipeline-bar">Pipeline: Phase ' + doneCount + '/' + phaseCount + ' · ' + escapeHtml(ps.current_phase || '') + '</div>';
   }
   return '<div class="project-card" onclick="showProject(\'' + escapeHtml(p.name).replace(/'/g, '&#39;') + '\')">' +
     '<div class="card-header"><h3>' + escapeHtml(p.name) + '</h3><span class="direction-tag">' + escapeHtml(p.direction || '—') + '</span></div>' +

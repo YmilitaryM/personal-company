@@ -3,7 +3,6 @@ name: market-manager
 description: Market Manager subagent — market research, competitive analysis, GTM strategy
 model: inherit
 effort: high
-allowedTools: Read, Write, Glob, Grep, WebFetch, WebSearch
 skills: market
 ---
 

@@ -3,7 +3,6 @@ name: designer
 description: Designer subagent — UI/UX design, design system, prototyping
 model: opus
 effort: high
-allowedTools: Read, Write, Edit, Glob, Grep, WebFetch, WebSearch, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__use_figma, mcp__plugin_figma_figma__search_design_system, mcp__plugin_figma_figma__get_metadata, mcp__plugin_figma_figma__get_variable_defs, mcp__plugin_figma_figma__create_new_file, mcp__plugin_figma_figma__upload_assets
 skills: designer
 ---
 

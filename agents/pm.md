@@ -3,7 +3,6 @@ name: pm
 description: PM subagent — requirements analysis, PRD creation, backlog management
 model: opus
 effort: high
-allowedTools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch
 skills: pm
 ---
 

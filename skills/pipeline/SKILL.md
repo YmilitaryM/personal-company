@@ -4,7 +4,6 @@ description: Full automation pipeline — one command runs the complete software
 when_to_use: When you want to run a project end-to-end without manual intervention at each stage. Also use /pipeline resume to continue an interrupted pipeline.
 argument-hint: "[start <project> | resume <project> | status <project> | cancel <project>]"
 user-invocable: true
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, TaskCreate, TaskUpdate, mcp__ai-team-db__get_project, mcp__ai-team-db__create_project, mcp__ai-team-db__update_project_status, mcp__ai-team-db__create_task, mcp__ai-team-db__update_task, mcp__ai-team-db__list_tasks, mcp__ai-team-db__create_review, mcp__ai-team-db__get_review, mcp__ai-team-db__get_dashboard, mcp__ai-team-db__list_team, mcp__ai-team-db__search_knowledge, mcp__ai-team-db__add_knowledge, mcp__ai-team-db__git_create_branch, mcp__ai-team-db__git_commit, mcp__ai-team-db__git_merge_branch, mcp__ai-team-db__git_get_status
 model: opus
 context: fork
 effort: high
@@ -178,8 +177,13 @@ Context: Read projects/<name>/intake-brief.md and projects/<name>/market-researc
 Your job:
 1. Write comprehensive PRD to projects/<name>/prd.md informed by market research
 2. Include: problem statement, user personas, functional requirements (Must/Should/Nice), non-functional requirements, acceptance criteria
-3. Include competitive differentiation section
+3. Include competitive differentiation section — for each differentiator, cite the specific competitor weakness or gap from market-research.md that it addresses
 4. Update project status: set phase to "requirements"
+
+TRACEABILITY — your PRD must include a "References" section at the end listing:
+- Which market research findings influenced each major feature decision
+- Which CTO charter approval risks are addressed by specific requirements
+- How the intake brief's resource forecast shaped scope decisions
 
 Return: brief summary of what we're building and why.
 ```
@@ -199,12 +203,19 @@ Context: Read projects/<name>/prd.md, projects/<name>/market-research.md, config
 Your job:
 1. Review PRD against config/tech-standards.json
 2. Produce Architecture Compliance Report in projects/<name>/architecture-review.md:
-   - Compliance matrix: each tech choice → standard or exception
+   - Compliance matrix: each tech choice → standard or exception, with justification
+   - For each PRD functional requirement (F01-F34), note which architecture component satisfies it
    - TDD requirements: test framework, directory structure, coverage targets
    - Issues found with severity (blocker/warning/suggestion)
    - For non-standard technology: write a brief ADR justifying the choice
 3. Record architecture decisions via mcp__ai-team-db__add_knowledge(type="architecture", ...)
 4. Update project status: set phase to "architecture_review"
+
+TRACEABILITY — your report must include a "Requirements Coverage" table:
+| PRD Requirement ID | Architecture Component | How Addressed |
+| F01 (Hero) | Next.js + Three.js/R3F lazy load | 3D particles with CSS fallback on mobile |
+
+Also include a "Market Alignment" note: how your tech choices support the competitive differentiation strategy from the PRD.
 
 Return: compliance summary with blocker count.
 ```
@@ -257,7 +268,7 @@ Spawn `designer` agent:
 ```
 Project: <name>
 Phase: UI/UX Design (Phase 4 of 9)
-Context: Read projects/<name>/prd.md, projects/<name>/architecture-review.md, config/tech-standards.json
+Context: Read projects/<name>/prd.md, projects/<name>/architecture-review.md, config/tech-standards.json, AND the CTO architecture approval verdict+conditions from .pipeline-state.json
 
 Your job as Designer — create the visual design using Figma:
 
@@ -267,29 +278,34 @@ DESIGN SYSTEM SETUP:
 3. Export design tokens to design-system/tokens.json
 
 PAGE DESIGNS (create in Figma):
-4. Design all key pages/screens based on PRD functional requirements:
-   - Homepage with Hero section (3D particle effect area + CTA)
-   - About page (company intro, timeline, honors, team)
-   - Products list + Product detail page
-   - Solutions list + Solution detail page
-   - Cases list + Case detail page
-   - Contact page with form
-   - Admin login + Admin dashboard layout
+4. Design all key pages/screens based on PRD functional requirements. For EACH page, explicitly note which PRD requirement(s) it fulfills.
 5. For each page: create desktop (1440px) and mobile (375px) variants
 6. Use glassmorphism 2.0 style: frosted glass cards with diffuse light backgrounds + 1px micro-glow borders
+7. Respect architecture constraints: if the architecture-review.md specifies tech choices (e.g., Next.js SSR, Three.js lazy load), ensure your designs account for them (e.g., design CSS fallback for mobile where 3D is disabled)
 
 DESIGN SPEC DOCUMENT:
-7. Write projects/<name>/design-spec.md including:
+8. Write projects/<name>/design-spec.md including:
    - Design system overview (colors, typography, spacing, effects)
-   - Page-by-page design decisions and rationale
+   - Page-by-page design decisions WITH rationale linking to PRD requirements and user personas
    - Responsive breakpoint strategy
    - Animation/motion design notes
    - Accessibility considerations (contrast ratios, focus states)
-8. Record Figma file URL in pipeline state (design.figma_file)
+9. Record Figma file URL in pipeline state (design.figma_file)
+
+CTO CONDITION CHECK:
+10. If the CTO attached conditions to architecture approval, verify each condition is addressed:
+    - "Mobile 3D degradation" → your mobile variants use CSS fallback
+    - "Markdown editor bundle size" → design a lightweight editing UI
+    - "Baidu SEO/SSR compatibility" → ensure all content is available without JS
+
+TRACEABILITY — design-spec.md must include a "PRD Coverage" table:
+| PRD Requirement | Page/Screen | Figma Frame | Status |
+| F01 (Hero) | Homepage | /Homepage → Hero | ✅ |
+| ... | ... | ... | ... |
 
 DESIGN REVIEW:
-9. Self-review: check all pages against PRD requirements, verify responsive variants, verify accessibility
-10. Record design decisions via mcp__ai-team-db__add_knowledge(type="design", ...)
+11. Self-review: check all pages against PRD requirements, verify responsive variants, verify accessibility
+12. Record design decisions via mcp__ai-team-db__add_knowledge(type="design", ...)
 
 Return: Figma file URL, page count, design token summary, any design debt noted.
 ```
@@ -304,17 +320,13 @@ Spawn `tech-lead` agent:
 ```
 Project: <name>
 Phase: Technical Planning (Phase 5 of 9)
-Context: Read projects/<name>/prd.md, projects/<name>/architecture-review.md, config/tech-standards.json
+Context: Read projects/<name>/prd.md, projects/<name>/architecture-review.md, projects/<name>/design-spec.md, config/tech-standards.json, AND the CTO architecture approval conditions from .pipeline-state.json
 
 Your job as Tech Lead — you are building your team and execution plan:
 
 TEAM FORMATION (do this FIRST):
 1. Use mcp__ai-team-db__list_team to see available engineers
-2. Select engineers based on project direction:
-   - ML project → prioritize ml_engineer from resource pool
-   - IoT project → prioritize iot_engineer
-   - Agent/KB project → prioritize agent_engineer
-   - App&Web project → prioritize senior_engineer
+2. Select engineers based on project direction. If design-spec.md exists and calls for specialized skills (3D, animation), ensure your team has those skills.
 3. Minimum: 1 senior engineer + 1 domain engineer
 4. Record team assignments via mcp__ai-team-db__update_team_member
 5. Record resource_assignment decision: who, why, what skills
@@ -322,10 +334,13 @@ TEAM FORMATION (do this FIRST):
 TECHNICAL DESIGN:
 6. Design the technical solution in projects/<name>/tech-spec.md:
    - System architecture, technology stack, data models, API contracts, component tree
+   - For each architecture decision from architecture-review.md that impacts implementation, note how you're implementing it
+   - If design-spec.md specifies visual patterns (glassmorphism, 3D particles, animations), include the frontend implementation approach
 7. Break down into tasks in projects/<name>/tasks.md:
    - Each task: ID, title, description, acceptance criteria, estimated hours, dependencies
    - Each task: specify required skills (backend/frontend/ML/IoT/Agent)
    - Tasks ordered by dependency, each completable in one session
+   - Tag tasks that relate to CTO conditions (e.g., "CONDITION: Mobile 3D degradation") so they are validated during quality gates
 8. Create initial sprint via mcp__ai-team-db__create_sprint
 9. Update project status: set phase to "planning"
 
@@ -334,9 +349,14 @@ TASK ASSIGNMENT:
 11. Use mcp__ai-team-db__update_task(assignee=..., status="assigned")
 12. Record task_assignment decisions
 
+CROSS-PHASE VERIFICATION:
+13. Verify every PRD functional requirement (F01-F34) has at least one task covering it
+14. Verify every CTO condition has a task tagged for it
+15. If design-spec.md specifies a UI pattern not covered by existing architecture, flag it
+
 IMPORTANT: Tasks without assignees cannot start. Every task must have a named owner before development begins.
 
-Return: team formed, task count, estimated timeline, any risks.
+Return: team formed, task count, estimated timeline, any risks, coverage gaps found.
 ```
 
 Wait for completion. If failed → phase_fail("planning", error).
@@ -439,15 +459,25 @@ For each gate (DG1, DG2, DG3, DG4) in order:
 
 Update quality phase with current gate `in_progress`.
 
-**DG1 (方案设计完成)**: architecture compliance, UX design, task decomposition, TDD test plan
-**DG2 (核心开发完成)**: code quality, design fidelity, TDD compliance, test coverage ≥80%
-**DG3 (质量保证完成)**: performance, security, bug rate, regression test coverage
-**DG4 (待交付)**: deployment readiness, documentation, acceptance criteria compliance
+**DG1 (方案设计完成)**: architecture compliance, UX design, task decomposition, TDD test plan. Also verify: design-spec.md PRD coverage table is complete, architecture-review.md requirements coverage table maps all PRD requirements, CTO conditions are tagged in tasks.md.
+
+**DG2 (核心开发完成)**: code quality, design fidelity, TDD compliance, test coverage ≥80%. Also verify: design spec is faithfully implemented, CTO conditions tagged in tasks are resolved, there are no regressions against the PRD acceptance criteria.
+
+**DG3 (质量保证完成)**: performance, security, bug rate, regression test coverage. Also verify: CTO conditions about performance (Mobile INP, bundle size) are met with evidence, Baidu SEO compatibility is verified.
+
+**DG4 (待交付)**: deployment readiness, documentation, acceptance criteria compliance. Also verify: ALL CTO conditions from architecture approval are satisfied with evidence, every PRD acceptance criterion (AC1-AC10) has a passing test or manual verification.
+
+**CTO CONDITION VERIFICATION**: Before each gate, the orchestrator reads the CTO approval decision from .pipeline-state.json and includes the conditions in the review context. Reviewers must check each condition as part of their evaluation.
 
 Each gate follows a THREE-ROUND process:
 
 **Round 1: Independent Review**
 Spawn reviewer-r1, reviewer-r2, reviewer-r3 SIMULTANEOUSLY. Isolated. Each reviews ALL aspects.
+
+Review context must include:
+- The CTO architecture approval decision (verdict + conditions) from .pipeline-state.json
+- A checklist of PRD functional requirements for DG1, or PRD acceptance criteria for DG4
+- The traceability tables from architecture-review.md and design-spec.md
 
 **Round 2: Cross-Examination Debate**
 Compile Round 1 results into Debate Brief. Spawn all 3 reviewers again. They challenge, defend, concede, identify conflicts.

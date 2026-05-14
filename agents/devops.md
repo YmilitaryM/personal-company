@@ -3,7 +3,6 @@ name: devops
 description: DevOps/SRE subagent — CI/CD, infrastructure, deployment, monitoring, security
 model: inherit
 effort: high
-allowedTools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch
 skills: devops
 ---
 
