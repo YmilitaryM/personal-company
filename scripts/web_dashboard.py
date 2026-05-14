@@ -669,6 +669,8 @@ function renderProject() {
     const phaseNames = {intake:'Intake', market_research:'Market Research', requirements:'Requirements',
       architecture:'Architecture', cto_architecture_approval:'CTO Approval', planning:'Planning',
       development:'Development', quality:'Quality Gates', delivery:'Delivery'};
+    const phaseDocs = {intake:'intake-brief.md', market_research:'market-research.md', requirements:'prd.md',
+      architecture:'architecture-review.md', planning:'tech-spec.md', development:'tasks.md', delivery:'delivery-report.md'};
     let phaseNum = 0;
     for (const [key, phase] of Object.entries(pipe.phases || {})) {
       const icon = phase.status === 'done' ? '✅' : phase.status === 'in_progress' ? '🔄' : phase.status === 'failed' ? '❌' : '⏳';
@@ -685,6 +687,10 @@ function renderProject() {
         }
         html += '</span>';
       }
+      const doc = phaseDocs[key];
+      if (doc && phase.status === 'done') {
+        html += '<a href="/api/file?project=' + encodeURIComponent(currentProject) + '&file=' + encodeURIComponent(doc) + '" target="_blank" style="font-size:10px;margin-left:6px;color:var(--accent);text-decoration:none" title="View ' + escapeHtml(doc) + '">📄</a>';
+      }
       html += '</li>';
       phaseNum++;
     }
@@ -698,6 +704,22 @@ function renderProject() {
     blockers.forEach(b => { html += '<li>' + escapeHtml(typeof b === 'string' ? b : JSON.stringify(b)) + '</li>'; });
     html += '</ul></div>';
   }
+
+  // Documents section
+  html += '<div class="detail-card"><h4>Project Documents</h4><div style="display:flex;flex-wrap:wrap;gap:6px">';
+  const docs = [
+    {file:'intake-brief.md', label:'Intake Brief'},
+    {file:'market-research.md', label:'Market Research'},
+    {file:'prd.md', label:'PRD'},
+    {file:'architecture-review.md', label:'Architecture Review'},
+    {file:'tech-spec.md', label:'Tech Spec'},
+    {file:'tasks.md', label:'Task Breakdown'},
+    {file:'delivery-report.md', label:'Delivery Report'},
+  ];
+  docs.forEach(d => {
+    html += '<a href="/api/file?project=' + encodeURIComponent(currentProject) + '&file=' + d.file + '" target="_blank" style="display:inline-block;padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--accent);text-decoration:none;font-size:12px">' + escapeHtml(d.label) + '</a>';
+  });
+  html += '</div></div>';
 
   html += '</div>';
   html += '<div class="refresh-indicator">Auto-refresh every 30s</div>';
@@ -1215,6 +1237,38 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     'set': bool(val),
                 }
             self._send_json({'keys': keys_out, 'masked': True})
+            return
+
+        if path == '/api/file':
+            project = params.get('project', [None])[0]
+            filename = params.get('file', [None])[0]
+            if not project or not filename or not _VALID_NAME_RE.match(project):
+                self._send_json({'error': 'Invalid project or file'}, 400)
+                return
+            if '..' in filename or '/' in filename:
+                self._send_json({'error': 'Invalid filename'}, 400)
+                return
+            for d in _get_all_project_dirs(self.projects_dir):
+                file_path = d / project / filename
+                if file_path.exists() and file_path.suffix == '.md':
+                    content = file_path.read_text()
+                    # Simple markdown → HTML conversion for display
+                    title = filename.replace('.md', '').replace('-', ' ').title()
+                    self._send_html(f'<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">'
+                        f'<title>{title}</title>'
+                        f'<style>body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:900px;margin:0 auto;padding:20px;background:#0d1117;color:#c9d1d9;line-height:1.6}}'
+                        f'pre{{background:#161b22;padding:16px;border-radius:6px;overflow-x:auto}}'
+                        f'code{{background:#161b22;padding:2px 6px;border-radius:3px;font-size:13px}}'
+                        f'h1,h2,h3,h4{{color:#58a6ff}}h1{{border-bottom:1px solid #30363d;padding-bottom:8px}}'
+                        f'table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #30363d;padding:6px 12px;text-align:left}}'
+                        f'th{{background:#161b22}}a{{color:#58a6ff}}</style></head><body>'
+                        f'<a href="javascript:history.back()" style="color:var(--accent)">← Back</a>'
+                        f'<div id="content"></div>'
+                        f'<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>'
+                        f'<script>document.getElementById("content").innerHTML=marked.parse({json.dumps(content)});</script>'
+                        f'</body></html>')
+                    return
+            self._send_json({'error': 'File not found'}, 404)
             return
 
         if path == '/config':
