@@ -163,6 +163,18 @@ def _extract_reviews(pipe: dict) -> dict:
     return gates
 
 
+def _guess_direction(name: str) -> str:
+    """Guess product direction from project name keywords."""
+    n = name.lower()
+    if any(kw in n for kw in ['iot', 'embedded', 'device', 'sensor', 'edge', 'hardware']):
+        return 'IoT'
+    if any(kw in n for kw in ['ml', 'ai', 'agent', 'rag', 'llm', 'model', 'train', 'infer', 'nlp', 'cv', 'algorithm']):
+        return 'AI/ML'
+    if any(kw in n for kw in ['web', 'app', 'mobile', 'ios', 'android', 'site', 'website', 'frontend', 'admin', 'portal', 'dashboard', 'ui']):
+        return 'App&Web'
+    return 'General'
+
+
 def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_project_names: set):
     """Scan a single projects_dir for project directories not in the index.
 
@@ -184,7 +196,7 @@ def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_proje
                 pipe = {}
             task_list = _extract_tasks(pipe, item)
             extra_projects[item.name] = {
-                'direction': _infer_direction(pipe),
+                'direction': _infer_direction(pipe) or _guess_direction(item.name),
                 'tech_lead': pipe.get('tech_lead') or _infer_tech_lead(pipe) or 'Unassigned',
                 'phase': pipe.get('current_phase', 'Unknown'),
                 'overall_progress': pipe.get('overall_progress') or _calc_progress(pipe),
@@ -198,7 +210,7 @@ def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_proje
         else:
             # Bare project directory — no pipeline state yet, still discoverable
             extra_projects[item.name] = {
-                'direction': 'Unknown',
+                'direction': _guess_direction(item.name),
                 'tech_lead': 'Unassigned',
                 'phase': 'new',
                 'overall_progress': 0,
