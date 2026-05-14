@@ -6,9 +6,9 @@ Usage: python3 scripts/web_dashboard.py [--port 8080] [--project-dir .]
 """
 import json
 import os
+import re
 import sys
 import time
-import re
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -85,8 +85,59 @@ def _calc_progress(pipe: dict) -> int:
     return round(done / len(phases) * 100)
 
 
-def _extract_tasks(pipe: dict) -> list:
-    """Extract task summary from pipeline development phase."""
+_TASK_RE = re.compile(r'^####\s+(TASK-\d+):\s*(.+)$')
+_PHASE_RE = re.compile(r'^###\s+(Phase\s+\d+):?\s*(.+)$')
+_ASSIGN_RE = re.compile(r'-\s*\*\*Assignee\*\*:\s*(.+)$')
+_ESTIMATE_RE = re.compile(r'-\s*\*\*Estimated\*\*:\s*(.+)$')
+
+def _parse_tasks_md(project_dir: Path) -> list:
+    """Parse tasks.md to extract structured task data."""
+    tasks_file = project_dir / 'tasks.md'
+    if not tasks_file.exists():
+        return []
+    try:
+        lines = tasks_file.read_text().splitlines()
+    except (IOError, UnicodeDecodeError):
+        return []
+    tasks = []
+    current_phase = ''
+    current_task = None
+    for line in lines:
+        pm = _PHASE_RE.match(line)
+        if pm:
+            current_phase = pm.group(2).strip()
+            continue
+        tm = _TASK_RE.match(line)
+        if tm:
+            if current_task:
+                tasks.append(current_task)
+            current_task = {'id': tm.group(1), 'title': tm.group(2).strip(),
+                           'phase': current_phase, 'assignee': '', 'estimate': ''}
+            continue
+        if current_task:
+            am = _ASSIGN_RE.match(line)
+            if am:
+                current_task['assignee'] = am.group(1).strip()
+                continue
+            em = _ESTIMATE_RE.match(line)
+            if em:
+                current_task['estimate'] = em.group(1).strip()
+                continue
+    if current_task:
+        tasks.append(current_task)
+    return tasks
+
+
+def _extract_tasks(pipe: dict, project_dir: Path = None) -> list:
+    """Extract tasks from tasks.md if available, otherwise from pipeline counts."""
+    if project_dir:
+        parsed = _parse_tasks_md(project_dir)
+        if parsed:
+            dev = pipe.get('phases', {}).get('development', {})
+            tasks_done = dev.get('tasks_done', 0)
+            for i, t in enumerate(parsed):
+                t['status'] = 'done' if i < tasks_done else 'todo'
+            return parsed
     dev = pipe.get('phases', {}).get('development', {})
     done = dev.get('tasks_done', 0)
     total = dev.get('tasks_total', 0)
@@ -127,6 +178,7 @@ def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_proje
                 pipe = json.loads(pipe_file.read_text())
             except (json.JSONDecodeError, IOError):
                 pipe = {}
+            task_list = _extract_tasks(pipe, item)
             extra_projects[item.name] = {
                 'direction': _infer_direction(pipe),
                 'tech_lead': pipe.get('tech_lead') or _infer_tech_lead(pipe) or 'Unassigned',
@@ -134,7 +186,7 @@ def _scan_dir_for_projects(projects_dir: Path, extra_projects: dict, index_proje
                 'overall_progress': pipe.get('overall_progress') or _calc_progress(pipe),
                 'status': pipe.get('status', 'ok'),
                 'blockers': pipe.get('blockers', []),
-                'tasks': _extract_tasks(pipe),
+                'tasks': task_list,
                 'reviews': _extract_reviews(pipe),
                 'start_date': pipe.get('started_at', ''),
                 'target_date': pipe.get('target_date', ''),
@@ -221,6 +273,7 @@ def load_dashboard_data(projects_dir: Path) -> dict:
             'status': pdata.get('status', 'ok'),
             'blockers': pdata.get('blockers', []),
             'tasks': tasks_by_status,
+            'task_list': tasks if any(t.get('id') for t in tasks) else [],
             'reviews': review_list,
             'start_date': pdata.get('start_date', ''),
             'target_date': pdata.get('target_date', ''),
@@ -586,6 +639,22 @@ function renderProject() {
   html += '<div class="progress-bar" style="margin-top:10px;"><div class="progress-fill green" style="width:' + taskPct + '%"></div></div>';
   html += '<span style="font-size:11px;color:var(--text-muted)">' + taskPct + '% complete</span>';
   html += '</div>';
+
+  // Task detail table
+  const taskList = p.task_list || [];
+  if (taskList.length > 0) {
+    html += '<div class="detail-card" style="grid-column:1/-1"><h4>Task Breakdown</h4>';
+    html += '<table class="review-table"><thead><tr><th>ID</th><th>Title</th><th>Phase</th><th>Assignee</th><th>Status</th></tr></thead><tbody>';
+    taskList.forEach(t => {
+      const statusCls = t.status === 'done' ? 'passed' : t.status === 'in_progress' ? 'in_review' : 'pending';
+      html += '<tr><td style="font-family:monospace;font-size:11px">' + escapeHtml(t.id||'') + '</td>' +
+        '<td>' + escapeHtml(t.title||'') + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + escapeHtml(t.phase||'') + '</td>' +
+        '<td style="font-size:12px">' + escapeHtml(t.assignee||'') + '</td>' +
+        '<td><span class="badge ' + statusCls + '">' + escapeHtml(t.status||'todo') + '</span></td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
 
   // Review gates
   html += '<div class="detail-card"><h4>Review Gates</h4>';
