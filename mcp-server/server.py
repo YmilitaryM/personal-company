@@ -226,7 +226,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="create_review",
-            description="Record a review for a project stage gate",
+            description="Record a review for a project stage gate (Round 1 independent or Round 2 debate)",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -235,8 +235,31 @@ async def list_tools() -> list[Tool]:
                     "reviewer": {"type": "string", "enum": ["R1", "R2", "R3"]},
                     "vote": {"type": "string", "enum": ["approve", "changes_requested", "reject"]},
                     "score": {"type": "number", "minimum": 0, "maximum": 10},
-                    "findings": {"type": "array", "items": {"type": "string"}},
+                    "round": {"type": "integer", "enum": [1, 2], "description": "1 = independent review, 2 = post-debate revised"},
+                    "dimensions": {"type": "object", "description": "Map of dimension_name → {score, evidence}"},
+                    "findings": {"type": "array", "items": {"type": "object", "properties": {
+                        "finding": {"type": "string"}, "severity": {"type": "string", "enum": ["blocker", "major", "minor"]},
+                        "evidence": {"type": "string"}, "dimension": {"type": "string"}
+                    }}},
                     "recommendations": {"type": "array", "items": {"type": "string"}},
+                    "revised_score": {"type": "number", "minimum": 0, "maximum": 10, "description": "Score after debate revision (Round 2 only)"},
+                    "challenges": {"type": "array", "items": {"type": "object", "properties": {
+                        "target": {"type": "string"}, "finding": {"type": "string"},
+                        "challenge": {"type": "string"}, "evidence": {"type": "string"}
+                    }}},
+                    "concessions": {"type": "array", "items": {"type": "object", "properties": {
+                        "finding": {"type": "string"}, "concession": {"type": "string"}, "score_impact": {"type": "string"}
+                    }}},
+                    "defenses": {"type": "array", "items": {"type": "object", "properties": {
+                        "finding": {"type": "string"}, "defense": {"type": "string"}
+                    }}},
+                    "conflicts_identified": {"type": "array", "items": {"type": "object", "properties": {
+                        "perspectives": {"type": "array", "items": {"type": "string"}},
+                        "issue": {"type": "string"}, "my_position": {"type": "string"},
+                        "resolution_suggestion": {"type": "string"}
+                    }}},
+                    "findings_missed": {"type": "array", "items": {"type": "string"}},
+                    "debate_summary": {"type": "string"}
                 },
                 "required": ["project_name", "gate", "reviewer", "vote"]
             }
@@ -472,10 +495,21 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             'reviewer': reviewer,
             'vote': arguments['vote'],
             'score': arguments.get('score', 0),
+            'round': arguments.get('round', 1),
+            'dimensions': arguments.get('dimensions', {}),
             'findings': arguments.get('findings', []),
             'recommendations': arguments.get('recommendations', []),
             'date': datetime.now().isoformat(),
         }
+        # Round 2 debate fields
+        if arguments.get('round') == 2:
+            review_entry['revised_score'] = arguments.get('revised_score')
+            review_entry['challenges'] = arguments.get('challenges', [])
+            review_entry['concessions'] = arguments.get('concessions', [])
+            review_entry['defenses'] = arguments.get('defenses', [])
+            review_entry['conflicts_identified'] = arguments.get('conflicts_identified', [])
+            review_entry['findings_missed'] = arguments.get('findings_missed', [])
+            review_entry['debate_summary'] = arguments.get('debate_summary', '')
         index['projects'][pname].setdefault('reviews', {}).setdefault(gate, {})[reviewer] = review_entry
         save_index(index)
         _write_review_md(PROJECTS_DIR / pname, gate, index['projects'][pname]['reviews'][gate])
@@ -879,20 +913,103 @@ def _write_review_md(project_dir: Path, gate: str, review_data: dict):
             continue
 
         vote_emoji = {'approve': '✅', 'changes_requested': '🔄', 'reject': '❌'}.get(rdata.get('vote', ''), '—')
-        content += f"""## {reviewer_id}
+        round_label = f" (Round {rdata.get('round', 1)})" if rdata.get('round') else ""
+        score = rdata.get('revised_score') or rdata.get('score', 0)
+        original_score = rdata.get('score', 0)
+        score_display = f"{score}/10"
+        if rdata.get('revised_score') is not None and rdata['revised_score'] != original_score:
+            score_display += f" (原始: {original_score}, 变化: {rdata['revised_score'] - original_score:+.1f})"
+
+        content += f"""## {reviewer_id}{round_label}
 **投票**: {vote_emoji} {rdata.get('vote', '—')}
-**评分**: {rdata.get('score', '—')}/10
+**评分**: {score_display}
 **日期**: {rdata.get('date', '—')[:10]}
 
-### 发现
 """
-        for f in rdata.get('findings', []):
-            content += f"- {f}\n"
+        # Dimensions with scores
+        dims = rdata.get('dimensions', {})
+        if dims:
+            content += "### 评分维度\n| 维度 | 得分 | 证据 |\n|------|------|------|\n"
+            for dname, ddata in dims.items():
+                if isinstance(ddata, dict):
+                    content += f"| {dname} | {ddata.get('score', '—')} | {ddata.get('evidence', '—')} |\n"
+                else:
+                    content += f"| {dname} | {ddata} | — |\n"
+            content += "\n"
 
-        content += "\n### 建议\n"
-        for r in rdata.get('recommendations', []):
-            content += f"- {r}\n"
-        content += "\n"
+        # Findings
+        findings = rdata.get('findings', [])
+        if findings:
+            content += "### 发现\n"
+            for f in findings:
+                if isinstance(f, dict):
+                    sev = f.get('severity', '—')
+                    sev_icon = {'blocker': '🔴', 'major': '🟡', 'minor': '🟢'}.get(sev, '—')
+                    content += f"- {sev_icon} [{sev}] **{f.get('finding', '')}** — {f.get('evidence', '—')} ({f.get('dimension', '—')})\n"
+                else:
+                    content += f"- {f}\n"
+            content += "\n"
+
+        # Recommendations
+        recs = rdata.get('recommendations', [])
+        if recs:
+            content += "### 建议\n"
+            for r in recs:
+                content += f"- {r}\n"
+            content += "\n"
+
+        # Round 2 debate fields
+        if rdata.get('round') == 2:
+            # Challenges
+            challenges = rdata.get('challenges', [])
+            if challenges:
+                content += "### 辩论挑战\n"
+                for c in challenges:
+                    if isinstance(c, dict):
+                        content += f"- 挑战 {c.get('target', '—')}: **{c.get('finding', '—')}** — {c.get('challenge', '—')}\n"
+                content += "\n"
+
+            # Concessions
+            concessions = rdata.get('concessions', [])
+            if concessions:
+                content += "### 让步\n"
+                for c in concessions:
+                    if isinstance(c, dict):
+                        impact = c.get('score_impact', '')
+                        content += f"- **{c.get('finding', '—')}**: {c.get('concession', '—')} (分数影响: {impact})\n"
+                content += "\n"
+
+            # Defenses
+            defenses = rdata.get('defenses', [])
+            if defenses:
+                content += "### 辩护\n"
+                for d in defenses:
+                    if isinstance(d, dict):
+                        content += f"- **{d.get('finding', '—')}**: {d.get('defense', '—')}\n"
+                content += "\n"
+
+            # Conflicts identified
+            conflicts = rdata.get('conflicts_identified', [])
+            if conflicts:
+                content += "### 识别到的冲突\n"
+                for c in conflicts:
+                    if isinstance(c, dict):
+                        perspectives = ', '.join(c.get('perspectives', []))
+                        content += f"- {perspectives}: {c.get('issue', '—')} → {c.get('resolution_suggestion', '—')}\n"
+                content += "\n"
+
+            # Findings missed
+            missed = rdata.get('findings_missed', [])
+            if missed:
+                content += "### 遗漏的发现\n"
+                for m in missed:
+                    content += f"- {m}\n"
+                content += "\n"
+
+            # Debate summary
+            summary = rdata.get('debate_summary', '')
+            if summary:
+                content += f"### 辩论摘要\n{summary}\n\n"
 
     # Calculate final result
     votes = [review_data.get(r, {}).get('vote') for r in ['R1', 'R2', 'R3']]
@@ -904,6 +1021,8 @@ def _write_review_md(project_dir: Path, gate: str, review_data: dict):
         result = '✅ 通过'
     elif reject_count >= 2:
         result = '❌ 驳回'
+    elif approve_count == 1 and reject_count == 1 and changes_count == 1:
+        result = '⚖️ 僵局 — 需CTO仲裁'
     else:
         result = '🔄 修改后重审'
 
