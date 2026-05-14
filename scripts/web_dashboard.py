@@ -644,7 +644,7 @@ async function loadConfig() {
   const form = document.getElementById('config-form');
   form.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">Loading model configuration...</div>';
   try {
-    const resp = await fetch('/api/models');
+    const resp = await fetch('/api/models', {signal: AbortSignal.timeout(10000)});
     if (!resp.ok) throw new Error('Server returned ' + resp.status);
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
