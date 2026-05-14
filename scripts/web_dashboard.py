@@ -667,10 +667,11 @@ function renderProject() {
   if (pipe) {
     html += '<div class="detail-card"><h4>Pipeline Progress</h4><ul class="pipeline-phase-list">';
     const phaseNames = {intake:'Intake', market_research:'Market Research', requirements:'Requirements',
-      architecture:'Architecture', cto_architecture_approval:'CTO Approval', planning:'Planning',
-      development:'Development', quality:'Quality Gates', delivery:'Delivery'};
+      architecture:'Architecture', cto_architecture_approval:'CTO Approval', design:'UI/UX Design',
+      planning:'Planning', development:'Development', quality:'Quality Gates', delivery:'Delivery'};
     const phaseDocs = {intake:'intake-brief.md', market_research:'market-research.md', requirements:'prd.md',
-      architecture:'architecture-review.md', planning:'tech-spec.md', development:'tasks.md', delivery:'delivery-report.md'};
+      architecture:'architecture-review.md', design:'design-spec.md', planning:'tech-spec.md',
+      development:'tasks.md', delivery:'delivery-report.md'};
     let phaseNum = 0;
     for (const [key, phase] of Object.entries(pipe.phases || {})) {
       const icon = phase.status === 'done' ? '✅' : phase.status === 'in_progress' ? '🔄' : phase.status === 'failed' ? '❌' : '⏳';
@@ -712,6 +713,7 @@ function renderProject() {
     {file:'market-research.md', label:'Market Research'},
     {file:'prd.md', label:'PRD'},
     {file:'architecture-review.md', label:'Architecture Review'},
+    {file:'design-spec.md', label:'Design Spec'},
     {file:'tech-spec.md', label:'Tech Spec'},
     {file:'tasks.md', label:'Task Breakdown'},
     {file:'delivery-report.md', label:'Delivery Report'},
